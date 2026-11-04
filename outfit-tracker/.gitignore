@@ -7,8 +7,6 @@ captures/
 .externalNativeBuild/
 .cxx/
 local.properties
-# Firebase config is created per developer. Do not commit it.
-google-services.json
 *.apk
 *.ap_
 *.aab

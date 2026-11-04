@@ -15,7 +15,20 @@ android {
         versionName = "1.0"
     }
 
+    signingConfigs {
+        getByName("debug") {
+            storeFile = file("outfit-debug.keystore")
+            storeType = "pkcs12"
+            storePassword = "050e7039595d461f"
+            keyAlias = "outfitdebug"
+            keyPassword = "050e7039595d461f"
+        }
+    }
+
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("debug")
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(
@@ -71,7 +84,8 @@ dependencies {
     testImplementation(libs.junit)
 }
 
-// The developer adds this file locally. CI and a fresh checkout must still assemble.
+// Applied whenever the file is present, including the committed debug config.
+// A checkout without the file still assembles and shows the setup screen.
 if (file("google-services.json").exists()) {
     apply(plugin = "com.google.gms.google-services")
 }

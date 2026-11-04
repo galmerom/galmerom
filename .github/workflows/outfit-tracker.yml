@@ -39,6 +39,7 @@ jobs:
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: outfit-tracker-debug
+          name: outfit-tracker-debug-apk
           path: outfit-tracker/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+          retention-days: 14

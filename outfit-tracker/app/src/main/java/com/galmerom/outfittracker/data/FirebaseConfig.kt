@@ -9,11 +9,16 @@ object FirebaseConfig {
         return appId.isNotBlank()
     }
 
+    /**
+     * Credential Manager needs the OAuth web client (client_type 3). The Google
+     * Services plugin writes that id into `default_web_client_id` from google-services.json.
+     * `web_client_id` is only an override when that generated value is missing.
+     */
     fun webClientId(context: Context): String? {
-        val override = context.getString(R.string.web_client_id).trim()
-        if (override.isNotEmpty() && !override.startsWith("YOUR_")) return override
         val generated = resourceString(context, "default_web_client_id")?.trim().orEmpty()
-        return generated.takeIf { it.isNotEmpty() && !it.startsWith("YOUR_") }
+        if (generated.isNotEmpty() && !generated.startsWith("YOUR_")) return generated
+        val override = context.getString(R.string.web_client_id).trim()
+        return override.takeIf { it.isNotEmpty() && !it.startsWith("YOUR_") }
     }
 
     private fun resourceString(context: Context, name: String): String? {

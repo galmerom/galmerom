@@ -16,33 +16,21 @@ Photos are downscaled on the phone to about 1280px JPEG, then uploaded to Cloud 
 
 Garment detection goes through `GarmentDetector`. The implementation calls Gemini with Firebase AI Logic (`firebase-ai`). If the call fails or returns nothing, the meeting screen stays on manual selection.
 
-`google-services.json` is not in git. The Google Services Gradle plugin is applied only when `app/google-services.json` exists, so `./gradlew assembleDebug` passes without it. A build without that file installs and shows a setup message instead of crashing.
+`app/google-services.json` is committed for this personal debug app. The Google Services plugin still applies only when that file exists, so a checkout without it still builds and shows a setup message instead of crashing. When the file is present, sign-in uses the generated string `default_web_client_id` (the OAuth web client, `client_type` 3).
+
+Debug builds are signed with the committed PKCS12 keystore `app/outfit-debug.keystore` (alias `outfitdebug`). Its certificate SHA-1 is `86:E8:3F:35:71:71:99:32:78:95:34:A0:6F:99:D9:45:B3:44:4E:3D`, which is registered on the Firebase Android app, so Google sign-in works for every local and CI debug APK. This key is for debug installs only. Before any wider distribution, replace it with a private key kept in a secret store, and stop publishing the keystore and its password.
 
 ## Setup
 
-1. Create a Firebase project and enable Cloud Firestore, Cloud Storage, Authentication with the Google provider, and Firebase AI Logic (Gemini).
-2. Add an Android app with package name `com.galmerom.outfittracker`.
-3. Add the debug SHA-1. From this folder:
+The Firebase project, Android app (`com.galmerom.outfittracker`), SHA-1/SHA-256 registration, Google sign-in provider, and Firestore/Storage rules are already in place. Firebase AI Logic (Gemini) still has to be enabled in that project if garment detection should run.
 
-   ```
-   ./gradlew signingReport
-   ```
+Build and install a debug APK:
 
-   Copy the SHA-1 of the `debug` variant into the Firebase Android app settings. Google sign-in needs it.
-4. Download `google-services.json` and place it at `outfit-tracker/app/google-services.json`. Do not commit it.
-5. Enabling Google sign-in creates a **Web client** in the file (`default_web_client_id`). The app reads that id. If it is missing, paste the Web client id into `web_client_id` in `app/src/main/res/values/strings.xml`.
-6. Deploy the security rules so each user can touch only `users/{uid}/**`. From this folder, with the Firebase CLI:
+```
+./gradlew assembleDebug
+```
 
-   ```
-   npx firebase-tools deploy --only firestore:rules,storage --project YOUR_PROJECT_ID
-   ```
-
-   Or paste `firestore.rules` into Firestore → Rules and `storage.rules` into Storage → Rules in the Firebase console.
-7. Build and install:
-
-   ```
-   ./gradlew assembleDebug
-   ```
+The debug APK from GitHub Actions is the artifact `outfit-tracker-debug-apk` on the workflow run.
 
 ## App
 
