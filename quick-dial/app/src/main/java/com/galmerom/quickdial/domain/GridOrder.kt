@@ -68,9 +68,13 @@ fun slide(order: List<String>, id: String, direction: Slide): List<String> {
 
 /** Each inner list starts with the contact that sits on the right of that row. */
 fun rowsRightmostFirst(orderedIds: List<String>, columns: Int): List<List<String>> {
-    val width = if (columns == 4) 4 else 3
+    val width = columnCount(columns)
     if (orderedIds.isEmpty()) return emptyList()
     return orderedIds.chunked(width)
 }
 
-fun columnCount(value: Int): Int = if (value == 4) 4 else 3
+fun columnCount(value: Int): Int = when (value) {
+    2 -> 2
+    4 -> 4
+    else -> 3
+}

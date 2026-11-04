@@ -26,6 +26,8 @@ import com.galmerom.quickdial.domain.QuickDialSettings
 import com.galmerom.quickdial.domain.SavedContact
 import com.galmerom.quickdial.domain.ShortNameSize
 import com.galmerom.quickdial.domain.Slide
+import com.galmerom.quickdial.domain.TILE_RATIO_DEFAULT
+import com.galmerom.quickdial.domain.tileRatio
 import com.galmerom.quickdial.domain.cleanShortName
 import com.galmerom.quickdial.domain.defaultShortName
 import com.galmerom.quickdial.domain.distinctNumbers
@@ -89,6 +91,7 @@ sealed interface CallPhase {
 data class HomeUi(
     val tiles: List<Tile> = emptyList(),
     val columns: Int = 3,
+    val tileRatio: Float = TILE_RATIO_DEFAULT,
     val frozen: Boolean = false,
     val showBadge: Boolean = false,
     val shortNameSp: Int = ShortNameSize.Medium.sp,
@@ -263,6 +266,10 @@ class QuickDialViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun setColumns(columns: Int) = updateSettings { it.copy(columns = columns) }
+
+    fun setTileRatio(ratio: Float) = updateSettings { it.copy(tileRatio = tileRatio(ratio)) }
+
+    fun resetTileRatio() = setTileRatio(TILE_RATIO_DEFAULT)
 
     fun setBadge(show: Boolean) = updateSettings { it.copy(showCallBadge = show) }
 
@@ -529,6 +536,7 @@ class QuickDialViewModel(app: Application) : AndroidViewModel(app) {
         _ui.value = HomeUi(
             tiles = tiles,
             columns = latestSettings.columns,
+            tileRatio = latestSettings.tileRatio,
             frozen = latestSettings.frozen,
             showBadge = latestSettings.showCallBadge,
             shortNameSp = ShortNameSize.fromKey(latestSettings.shortNameSize).sp,

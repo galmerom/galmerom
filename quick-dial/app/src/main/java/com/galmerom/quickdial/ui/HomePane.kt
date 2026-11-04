@@ -8,6 +8,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -42,7 +43,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.galmerom.quickdial.R
 import com.galmerom.quickdial.domain.avatarIndex
+import com.galmerom.quickdial.domain.captionHeightDp
 import com.galmerom.quickdial.domain.initialLetter
+import com.galmerom.quickdial.domain.letterFontSp
+import com.galmerom.quickdial.domain.shortNameFontSp
+import com.galmerom.quickdial.domain.tileHeightDp
 import com.galmerom.quickdial.ui.theme.AvatarPalette
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -57,22 +62,7 @@ fun HomePane(
     modifier: Modifier = Modifier,
 ) {
     Column(modifier.fillMaxSize().padding(horizontal = 16.dp)) {
-        Button(
-            onClick = onVoice,
-            modifier = Modifier.fillMaxWidth().padding(top = 8.dp).height(88.dp),
-            shape = MaterialTheme.shapes.large,
-        ) {
-            Icon(
-                painterResource(R.drawable.ic_mic),
-                contentDescription = null,
-                modifier = Modifier.padding(end = 8.dp),
-            )
-            Text(
-                text = stringResource(if (ui.listening) R.string.voice_listening else R.string.voice_idle),
-                style = MaterialTheme.typography.titleLarge,
-                textAlign = TextAlign.Center,
-            )
-        }
+        VoiceButton(listening = ui.listening, onClick = onVoice)
         if (ui.contactsDenied) {
             Text(
                 stringResource(R.string.banner_contacts),
@@ -97,6 +87,7 @@ fun HomePane(
             else -> ContactGrid(
                 tiles = ui.tiles,
                 columns = ui.columns,
+                tileRatio = ui.tileRatio,
                 showBadge = ui.showBadge,
                 shortNameSp = ui.shortNameSp,
                 onCall = onCall,
@@ -104,6 +95,26 @@ fun HomePane(
                 modifier = Modifier.weight(1f).padding(top = 12.dp),
             )
         }
+    }
+}
+
+@Composable
+private fun VoiceButton(listening: Boolean, onClick: () -> Unit) {
+    Button(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth().padding(top = 8.dp).height(88.dp),
+        shape = MaterialTheme.shapes.large,
+    ) {
+        Icon(
+            painterResource(R.drawable.ic_mic),
+            contentDescription = null,
+            modifier = Modifier.padding(end = 8.dp),
+        )
+        Text(
+            text = stringResource(if (listening) R.string.voice_listening else R.string.voice_idle),
+            style = MaterialTheme.typography.titleLarge,
+            textAlign = TextAlign.Center,
+        )
     }
 }
 
@@ -137,6 +148,7 @@ private fun EmptyGrid(onOpenMenu: () -> Unit, modifier: Modifier = Modifier) {
 private fun ContactGrid(
     tiles: List<Tile>,
     columns: Int,
+    tileRatio: Float,
     showBadge: Boolean,
     shortNameSp: Int,
     onCall: (Tile) -> Unit,
@@ -158,6 +170,7 @@ private fun ContactGrid(
                         tile = tile,
                         showBadge = showBadge,
                         shortNameSp = shortNameSp,
+                        tileRatio = tileRatio,
                         onCall = { onCall(tile) },
                         onWhatsApp = { onWhatsApp(tile) },
                         modifier = Modifier.weight(1f),
@@ -175,62 +188,81 @@ private fun ContactTile(
     tile: Tile,
     showBadge: Boolean,
     shortNameSp: Int,
+    tileRatio: Float,
     onCall: () -> Unit,
     onWhatsApp: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val letter = initialLetter(tile.shortName)
     val color = AvatarPalette[avatarIndex(tile.shortName, AvatarPalette.size)]
-    Box(
-        modifier
-            .aspectRatio(1f)
-            .clip(MaterialTheme.shapes.large)
-            .background(MaterialTheme.colorScheme.surface)
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, MaterialTheme.shapes.large)
-            .combinedClickable(
-                onClick = {},
-                onLongClick = onCall,
-                onDoubleClick = onWhatsApp,
-                onLongClickLabel = stringResource(R.string.tile_call, tile.shortName),
-            ),
-    ) {
-        Column(
-            modifier = Modifier.fillMaxSize().padding(8.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
+    val callLabel = stringResource(R.string.tile_call, tile.shortName)
+    BoxWithConstraints(modifier.fillMaxWidth()) {
+        val widthDp = maxWidth.value
+        val nameSp = shortNameFontSp(shortNameSp, widthDp)
+        val heightDp = tileHeightDp(widthDp, tileRatio, captionHeightDp(nameSp))
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(heightDp.dp)
+                .clip(MaterialTheme.shapes.large)
+                .background(MaterialTheme.colorScheme.surface)
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, MaterialTheme.shapes.large)
+                .combinedClickable(
+                    onClick = {},
+                    onLongClick = onCall,
+                    onDoubleClick = onWhatsApp,
+                    onLongClickLabel = callLabel,
+                ),
         ) {
-            ContactAvatar(
-                photoUri = tile.photoUri,
-                letter = letter,
-                color = color,
-                modifier = Modifier.weight(1f).fillMaxWidth(),
-            )
-            Text(
-                text = tile.shortName,
-                fontSize = shortNameSp.sp,
-                lineHeight = (shortNameSp + 4).sp,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
-        if (showBadge) {
-            Text(
-                text = if (tile.callCount > 99) "99+" else tile.callCount.toString(),
-                color = MaterialTheme.colorScheme.onPrimary,
-                fontSize = 13.sp,
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(6.dp)
-                    .background(MaterialTheme.colorScheme.primary, CircleShape)
-                    .padding(horizontal = 7.dp, vertical = 2.dp),
-            )
+            Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
+                ContactAvatar(
+                    photoUri = tile.photoUri,
+                    letter = letter,
+                    color = color,
+                    letterSp = letterFontSp(widthDp),
+                    modifier = Modifier.fillMaxWidth().aspectRatio(1f),
+                )
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .padding(horizontal = 4.dp, vertical = 2.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = tile.shortName,
+                        fontSize = nameSp.sp,
+                        lineHeight = (nameSp * 1.15f).sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = TextAlign.Center,
+                    )
+                }
+            }
+            if (showBadge) {
+                Text(
+                    text = if (tile.callCount > 99) "99+" else tile.callCount.toString(),
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    fontSize = (nameSp * 0.55f).coerceAtLeast(12f).sp,
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(6.dp)
+                        .background(MaterialTheme.colorScheme.primary, CircleShape)
+                        .padding(horizontal = 7.dp, vertical = 2.dp),
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun ContactAvatar(photoUri: String?, letter: String, color: Color, modifier: Modifier) {
+private fun ContactAvatar(
+    photoUri: String?,
+    letter: String,
+    color: Color,
+    letterSp: Float,
+    modifier: Modifier,
+) {
     val context = LocalContext.current
     val bitmap by produceState<Bitmap?>(initialValue = null, photoUri) {
         value = withContext(Dispatchers.IO) {
@@ -256,10 +288,10 @@ private fun ContactAvatar(photoUri: String?, letter: String, color: Color, modif
             )
         } else {
             Box(
-                modifier = Modifier.fillMaxSize().padding(6.dp).clip(CircleShape).background(color),
+                modifier = Modifier.fillMaxSize().clip(CircleShape).background(color),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(letter, color = Color.White, style = MaterialTheme.typography.headlineMedium)
+                Text(letter, color = Color.White, fontSize = letterSp.sp, lineHeight = letterSp.sp)
             }
         }
     }

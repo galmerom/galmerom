@@ -112,9 +112,11 @@ class GridOrderTest {
     }
 
     @Test
-    fun fourColumns_stillStartEachRowOnTheRight() {
+    fun columns_startEachRowOnTheRight() {
         val ids = listOf("1", "2", "3", "4", "5")
+        assertEquals(listOf(listOf("1", "2"), listOf("3", "4"), listOf("5")), rowsRightmostFirst(ids, 2))
         assertEquals(listOf(listOf("1", "2", "3", "4"), listOf("5")), rowsRightmostFirst(ids, 4))
+        assertEquals(2, columnCount(2))
         assertEquals(3, columnCount(3))
         assertEquals(4, columnCount(4))
         assertEquals(3, columnCount(9))
@@ -124,6 +126,7 @@ class GridOrderTest {
     fun settings_sanitizeUnknownValuesAndDropOrphans() {
         val settings = QuickDialSettings(
             columns = 9,
+            tileRatio = 9f,
             shortNameSize = "huge",
             theme = "nope",
             showCallBadge = false,
@@ -135,6 +138,7 @@ class GridOrderTest {
             frozenOrder = listOf("missing", "a", "a"),
         ).sanitized()
         assertEquals(3, settings.columns)
+        assertEquals(TILE_RATIO_MAX, settings.tileRatio)
         assertEquals(ShortNameSize.Medium.key, settings.shortNameSize)
         assertEquals(DialTheme.Blue.key, settings.theme)
         assertEquals(listOf("a"), settings.contacts.map { it.id })

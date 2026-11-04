@@ -9,8 +9,12 @@
     <string name="empty_body">פתח את התפריט ובחר את מי להציג בחיוג המהיר.</string>
     <string name="open_menu">פתיחת התפריט</string>
     <string name="columns">עמודות</string>
+    <string name="columns_2">2 עמודות</string>
     <string name="columns_3">3 עמודות</string>
     <string name="columns_4">4 עמודות</string>
+    <string name="tile_ratio">יחס גובה לרוחב</string>
+    <string name="tile_ratio_value">%1$.2f</string>
+    <string name="tile_ratio_reset">איפוס</string>
     <string name="pick_contacts">בחירת אנשי קשר</string>
     <string name="contacts_title">אנשי קשר</string>
     <string name="reorder">שינוי סדר</string>

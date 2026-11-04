@@ -40,6 +40,7 @@ data class SavedContact(
 @Serializable
 data class QuickDialSettings(
     val columns: Int = 3,
+    val tileRatio: Float = TILE_RATIO_DEFAULT,
     val frozen: Boolean = false,
     val frozenOrder: List<String> = emptyList(),
     val showCallBadge: Boolean = false,
@@ -52,6 +53,7 @@ data class QuickDialSettings(
         val ids = unique.map { it.id }.toSet()
         return copy(
             columns = columnCount(columns),
+            tileRatio = tileRatio(tileRatio),
             shortNameSize = ShortNameSize.fromKey(shortNameSize).key,
             theme = DialTheme.fromKey(theme).key,
             contacts = unique,

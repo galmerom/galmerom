@@ -14,6 +14,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -42,8 +43,10 @@ import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
@@ -70,6 +73,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.galmerom.quickdial.R
 import com.galmerom.quickdial.domain.DialTheme
 import com.galmerom.quickdial.domain.ShortNameSize
+import com.galmerom.quickdial.domain.TILE_RATIO_MAX
+import com.galmerom.quickdial.domain.TILE_RATIO_MIN
 import com.galmerom.quickdial.domain.dialableNumber
 import com.galmerom.quickdial.ui.theme.LocalDialTheme
 import com.galmerom.quickdial.ui.theme.QuickDialTheme
@@ -182,6 +187,8 @@ fun QuickDialApp(viewModel: QuickDialViewModel = viewModel()) {
                                 viewModel.openReorder()
                             },
                             onColumns = viewModel::setColumns,
+                            onTileRatio = viewModel::setTileRatio,
+                            onResetTileRatio = viewModel::resetTileRatio,
                             onFrozen = viewModel::setFrozen,
                             onBadge = viewModel::setBadge,
                             onSize = viewModel::setShortNameSize,
@@ -315,6 +322,8 @@ private fun DrawerContent(
     onPickContacts: () -> Unit,
     onReorder: () -> Unit,
     onColumns: (Int) -> Unit,
+    onTileRatio: (Float) -> Unit,
+    onResetTileRatio: () -> Unit,
     onFrozen: (Boolean) -> Unit,
     onBadge: (Boolean) -> Unit,
     onSize: (ShortNameSize) -> Unit,
@@ -327,7 +336,15 @@ private fun DrawerContent(
         ) {
             Text(stringResource(R.string.app_name), style = MaterialTheme.typography.headlineSmall)
             Text(stringResource(R.string.columns), style = MaterialTheme.typography.titleMedium)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                FilterChip(
+                    selected = ui.columns == 2,
+                    onClick = { onColumns(2) },
+                    label = { Text(stringResource(R.string.columns_2), style = MaterialTheme.typography.titleMedium) },
+                )
                 FilterChip(
                     selected = ui.columns == 3,
                     onClick = { onColumns(3) },
@@ -339,6 +356,25 @@ private fun DrawerContent(
                     label = { Text(stringResource(R.string.columns_4), style = MaterialTheme.typography.titleMedium) },
                 )
             }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    stringResource(R.string.tile_ratio),
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Text(
+                    stringResource(R.string.tile_ratio_value, ui.tileRatio),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                TextButton(onClick = onResetTileRatio, modifier = Modifier.heightIn(min = 48.dp)) {
+                    Text(stringResource(R.string.tile_ratio_reset), style = MaterialTheme.typography.titleMedium)
+                }
+            }
+            Slider(
+                value = ui.tileRatio,
+                onValueChange = onTileRatio,
+                valueRange = TILE_RATIO_MIN..TILE_RATIO_MAX,
+            )
             NavigationDrawerItem(
                 label = { Text(stringResource(R.string.pick_contacts), style = MaterialTheme.typography.titleLarge) },
                 selected = false,
