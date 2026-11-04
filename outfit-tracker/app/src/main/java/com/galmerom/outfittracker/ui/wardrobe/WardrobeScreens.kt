@@ -33,7 +33,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.ui.res.painterResource
 import androidx.compose.runtime.Composable
@@ -98,8 +98,10 @@ fun WardrobeScreen(onAdd: () -> Unit, onEdit: (String) -> Unit, onHidden: () -> 
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             item {
-                TextButton(onClick = onHidden) {
-                    Text(stringResource(R.string.wardrobe_hidden))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    TextButton(onClick = onHidden) {
+                        Text(stringResource(R.string.wardrobe_hidden))
+                    }
                 }
             }
             if (items.isEmpty()) {
@@ -344,12 +346,12 @@ private fun SecondaryPage(
         containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
-            TopAppBar(
+            CenterAlignedTopAppBar(
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background,
                     titleContentColor = MaterialTheme.colorScheme.onBackground,
                 ),
-                title = { Text(title) },
+                title = { Text(title, style = MaterialTheme.typography.headlineSmall) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(

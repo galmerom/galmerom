@@ -46,7 +46,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
@@ -186,7 +186,6 @@ private fun AppScaffold(user: SignedInUser) {
             launchSingleTop = true
         }
     }
-    val entityLabel = stringResource(R.string.entity_label)
     val barColors = NavigationBarItemDefaults.colors(
         selectedIconColor = MaterialTheme.colorScheme.primary,
         selectedTextColor = MaterialTheme.colorScheme.primary,
@@ -206,14 +205,6 @@ private fun AppScaffold(user: SignedInUser) {
                     )
                     Text(user.email.orEmpty(), color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(8.dp))
-                    NavigationDrawerItem(
-                        label = { Text(stringResource(R.string.menu_entities, entityLabel)) },
-                        selected = route == Routes.ENTITIES,
-                        onClick = {
-                            scope.launch { drawerState.close() }
-                            navController.navigate(Routes.ENTITIES)
-                        },
-                    )
                     NavigationDrawerItem(
                         label = { Text(stringResource(R.string.menu_categories)) },
                         selected = route == Routes.CATEGORIES,
@@ -242,7 +233,7 @@ private fun AppScaffold(user: SignedInUser) {
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             if (topLevel || route == Routes.HOME) {
-                TopAppBar(
+                CenterAlignedTopAppBar(
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = MaterialTheme.colorScheme.background,
                         titleContentColor = MaterialTheme.colorScheme.onBackground,
@@ -252,7 +243,9 @@ private fun AppScaffold(user: SignedInUser) {
                             Icon(Icons.Filled.Menu, contentDescription = stringResource(R.string.menu_open))
                         }
                     },
-                    title = { Text(stringResource(R.string.app_name), style = MaterialTheme.typography.titleLarge) },
+                    title = {
+                        Text(screenTitle(route), style = MaterialTheme.typography.headlineSmall)
+                    },
                     actions = {
                         if (showHomeButton) {
                             Button(
@@ -319,8 +312,9 @@ private fun AppScaffold(user: SignedInUser) {
                     showMeetingSaved = meetingSaved,
                     onMeetingSavedShown = { entry.savedStateHandle["meetingSaved"] = false },
                     onNewMeeting = { navController.navigate(Routes.LOG) },
-                    onSearch = { navController.navigate(Routes.SEARCH) },
                     onWardrobe = { navController.navigate(Routes.WARDROBE) },
+                    onEntities = { navController.navigate(Routes.ENTITIES) },
+                    onSearch = { navController.navigate(Routes.SEARCH) },
                 )
             }
             composable(Routes.LOG) { entry ->
@@ -426,12 +420,22 @@ private fun AppScaffold(user: SignedInUser) {
 }
 
 @Composable
+private fun screenTitle(route: String?): String = when (route) {
+    Routes.LOG -> stringResource(R.string.title_add_meeting)
+    Routes.LOG_EDIT -> stringResource(R.string.title_edit_meeting)
+    Routes.SEARCH -> stringResource(R.string.nav_search)
+    Routes.WARDROBE -> stringResource(R.string.nav_wardrobe)
+    else -> stringResource(R.string.app_name)
+}
+
+@Composable
 private fun HomeScreen(
     showMeetingSaved: Boolean,
     onMeetingSavedShown: () -> Unit,
     onNewMeeting: () -> Unit,
-    onSearch: () -> Unit,
     onWardrobe: () -> Unit,
+    onEntities: () -> Unit,
+    onSearch: () -> Unit,
 ) {
     androidx.compose.runtime.LaunchedEffect(showMeetingSaved) {
         if (showMeetingSaved) {
@@ -461,6 +465,7 @@ private fun HomeScreen(
         Text(stringResource(R.string.hello), style = MaterialTheme.typography.headlineMedium)
         HomeButton(stringResource(R.string.home_new_meeting), onNewMeeting)
         HomeButton(stringResource(R.string.nav_wardrobe), onWardrobe)
+        HomeButton(stringResource(R.string.home_entities), onEntities)
         HomeButton(stringResource(R.string.nav_search), onSearch)
     }
 }

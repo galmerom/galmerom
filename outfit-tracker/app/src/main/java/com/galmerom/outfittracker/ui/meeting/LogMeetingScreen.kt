@@ -58,6 +58,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.galmerom.outfittracker.R
 import com.galmerom.outfittracker.domain.logic.Dates
+import com.galmerom.outfittracker.domain.logic.ImageSizing
+import com.galmerom.outfittracker.domain.logic.MajorGarment
 import com.galmerom.outfittracker.domain.logic.RepeatWarning
 import com.galmerom.outfittracker.domain.model.ClothingCategory
 import com.galmerom.outfittracker.domain.model.EntityType
@@ -107,6 +109,8 @@ fun LogMeetingScreen(
     val context = LocalContext.current
     var showDate by remember { mutableStateOf(false) }
     var showManual by remember { mutableStateOf(false) }
+    var showNewEntity by remember { mutableStateOf(false) }
+    var zoomItem by remember { mutableStateOf<com.galmerom.outfittracker.domain.model.ClothingItem?>(null) }
     var askCancel by remember { mutableStateOf(false) }
     var confirmSuggestions by remember { mutableStateOf(false) }
     val leaveGate = LocalLeaveGate.current
@@ -196,10 +200,9 @@ fun LogMeetingScreen(
                     }
                 }
             }
-            Text(
-                stringResource(R.string.add_entity, entityLabel),
-                style = MaterialTheme.typography.titleSmall,
-            )
+            Button(onClick = { showNewEntity = true }, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.add_entity, entityLabel))
+            }
             state.suggestions.forEach { entity ->
                 Card(
                     onClick = { viewModel.selectEntity(entity) },
@@ -224,29 +227,6 @@ fun LogMeetingScreen(
                     }
                 }
             }
-            if (state.offerCreate) {
-                Text(stringResource(R.string.entity_type))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(
-                        selected = state.newEntityType == EntityType.PERSON,
-                        onClick = { viewModel.onEntityType(EntityType.PERSON) },
-                        label = { Text(stringResource(R.string.entity_type_person)) },
-                    )
-                    FilterChip(
-                        selected = state.newEntityType == EntityType.FORUM,
-                        onClick = { viewModel.onEntityType(EntityType.FORUM) },
-                        label = { Text(stringResource(R.string.entity_type_forum)) },
-                    )
-                }
-                Button(
-                    onClick = viewModel::createEntity,
-                    enabled = !state.creatingEntity,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(stringResource(R.string.entity_create, entityLabel, state.entityQuery.trim()))
-                }
-            }
-
             SectionTitle(stringResource(R.string.ai_section), prominent = true)
             DetectionBlock(
                 jpeg = state.meetingPhoto,
@@ -261,6 +241,7 @@ fun LogMeetingScreen(
             state.aiSuggestions.forEach { suggestion ->
                 if (suggestion.unmatched) {
                     UnmatchedSuggestionCard(
+                        caption = MajorGarment.caption(suggestion.categoryId.orEmpty()),
                         meetingJpeg = state.meetingPhoto,
                         existingUrl = state.existingPhotoUrl,
                         onOpen = { onCreateGarment(suggestion.key, suggestion.categoryId) },
@@ -303,24 +284,29 @@ fun LogMeetingScreen(
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     selected.forEach { item ->
                         val warning = state.warnings[item.id]
-                        if (warning == null) {
-                            InputChip(
-                                selected = true,
-                                onClick = { viewModel.removeClothing(item.id) },
-                                label = { Text(item.description) },
-                            )
-                        } else {
-                            Card(
-                                colors = warningCardColors(warning),
-                                border = BorderStroke(3.dp, MaterialTheme.colorScheme.error),
-                                shape = MaterialTheme.shapes.medium,
-                            ) {
-                                Column(Modifier.padding(10.dp)) {
-                                    InputChip(
-                                        selected = true,
-                                        onClick = { viewModel.removeClothing(item.id) },
-                                        label = { Text(item.description) },
+                        Column {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Card(onClick = { zoomItem = item }) {
+                                    ClothingImage(
+                                        jpeg = null,
+                                        url = item.photoUrl,
+                                        description = item.description,
+                                        modifier = Modifier.size(56.dp),
                                     )
+                                }
+                                Spacer(Modifier.width(6.dp))
+                                InputChip(
+                                    selected = true,
+                                    onClick = { viewModel.removeClothing(item.id) },
+                                    label = { Text(item.description) },
+                                )
+                            }
+                            if (warning != null) {
+                                Card(
+                                    colors = warningCardColors(warning),
+                                    border = BorderStroke(3.dp, MaterialTheme.colorScheme.error),
+                                    shape = MaterialTheme.shapes.medium,
+                                ) {
                                     RepeatWarningBanner(warning)
                                 }
                             }
@@ -407,6 +393,37 @@ fun LogMeetingScreen(
         ) { DatePicker(state = pickerState) }
     }
 
+    zoomItem?.let { item ->
+        AlertDialog(
+            onDismissRequest = { zoomItem = null },
+            title = { Text(item.description) },
+            text = {
+                ClothingImage(
+                    jpeg = null,
+                    url = item.photoUrl,
+                    description = item.description,
+                    modifier = Modifier.fillMaxWidth().height(360.dp),
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { zoomItem = null }) { Text(stringResource(R.string.ok)) }
+            },
+        )
+    }
+    if (showNewEntity) {
+        NewEntityDialog(
+            people = state.entities.filter { it.type == EntityType.PERSON && !it.hidden },
+            saving = state.creatingEntity,
+            onDismiss = { showNewEntity = false },
+            onDenied = { viewModel.notify(UserMessage.CAMERA_PERMISSION) },
+            onFailure = { viewModel.notify(UserMessage.GENERIC) },
+            onSave = { name, type, description, photo, hidden, memberIds ->
+                viewModel.createDetailedEntity(name, type, description, photo, hidden, memberIds) {
+                    showNewEntity = false
+                }
+            },
+        )
+    }
     if (showManual) {
         ManualItemDialog(
             categories = state.categories,
@@ -574,6 +591,7 @@ private fun MatchedSuggestionCard(
 
 @Composable
 private fun UnmatchedSuggestionCard(
+    caption: String,
     meetingJpeg: ByteArray?,
     existingUrl: String?,
     onOpen: () -> Unit,
@@ -601,7 +619,7 @@ private fun UnmatchedSuggestionCard(
                 modifier = Modifier.size(96.dp),
             )
             Text(
-                stringResource(R.string.ai_not_in_wardrobe),
+                stringResource(R.string.ai_missing_garment, caption),
                 modifier = Modifier.weight(1f),
                 style = MaterialTheme.typography.titleMedium,
             )
@@ -677,6 +695,116 @@ private fun PhotoBlock(
         OutlinedButton(onClick = actions.onCamera) { Text(stringResource(R.string.clothing_camera)) }
         OutlinedButton(onClick = actions.onGallery) { Text(stringResource(R.string.clothing_gallery)) }
     }
+}
+
+@Composable
+private fun NewEntityDialog(
+    people: List<com.galmerom.outfittracker.domain.model.Entity>,
+    saving: Boolean,
+    onDismiss: () -> Unit,
+    onDenied: () -> Unit,
+    onFailure: () -> Unit,
+    onSave: (String, EntityType, String, ByteArray?, Boolean, List<String>) -> Unit,
+) {
+    var name by remember { mutableStateOf("") }
+    var description by remember { mutableStateOf("") }
+    var type by remember { mutableStateOf(EntityType.PERSON) }
+    var hidden by remember { mutableStateOf(false) }
+    var photo by remember { mutableStateOf<ByteArray?>(null) }
+    var members by remember { mutableStateOf(setOf<String>()) }
+    val photos = rememberPhotoActions(
+        onJpeg = { photo = it },
+        onFailure = onFailure,
+        onDenied = onDenied,
+        maxEdge = ImageSizing.AVATAR_EDGE_PX,
+    )
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.add_entity, stringResource(R.string.entity_label))) },
+        text = {
+            Column(
+                Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    com.galmerom.outfittracker.ui.common.EntityAvatar(
+                        photoUrl = null,
+                        jpeg = photo,
+                        label = name,
+                        size = 64.dp,
+                    )
+                    Column {
+                        Text(
+                            stringResource(
+                                if (type == EntityType.FORUM) R.string.entity_logo else R.string.entity_photo,
+                            ),
+                        )
+                        Row {
+                            TextButton(onClick = photos.onCamera) { Text(stringResource(R.string.clothing_camera)) }
+                            TextButton(onClick = photos.onGallery) { Text(stringResource(R.string.clothing_gallery)) }
+                        }
+                    }
+                }
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text(stringResource(R.string.entity_name)) },
+                    colors = appTextFieldColors(),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = description,
+                    onValueChange = { description = it },
+                    label = { Text(stringResource(R.string.entity_description)) },
+                    colors = appTextFieldColors(),
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 2,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = type == EntityType.PERSON,
+                        onClick = { type = EntityType.PERSON },
+                        label = { Text(stringResource(R.string.entity_type_person)) },
+                    )
+                    FilterChip(
+                        selected = type == EntityType.FORUM,
+                        onClick = { type = EntityType.FORUM },
+                        label = { Text(stringResource(R.string.entity_type_forum)) },
+                    )
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(stringResource(R.string.entity_hidden_help), modifier = Modifier.weight(1f))
+                    androidx.compose.material3.Switch(checked = hidden, onCheckedChange = { hidden = it })
+                }
+                if (type == EntityType.FORUM) {
+                    Text(stringResource(R.string.entity_members), style = MaterialTheme.typography.titleMedium)
+                    if (people.isEmpty()) {
+                        Text(stringResource(R.string.entity_no_people), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    people.forEach { person ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            androidx.compose.material3.Checkbox(
+                                checked = person.id in members,
+                                onCheckedChange = { checked ->
+                                    members = if (checked) members + person.id else members - person.id
+                                },
+                            )
+                            Text(person.name)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onSave(name, type, description, photo, hidden, members.toList()) },
+                enabled = !saving && name.isNotBlank(),
+            ) { Text(stringResource(R.string.save)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+        },
+    )
 }
 
 @Composable

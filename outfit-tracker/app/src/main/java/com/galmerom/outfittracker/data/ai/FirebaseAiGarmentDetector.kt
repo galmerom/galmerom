@@ -38,7 +38,7 @@ class FirebaseAiGarmentDetector : GarmentDetector {
                 mapOf(
                     "itemIds" to Schema.array(Schema.string()),
                     "unmatched" to Schema.array(
-                        Schema.obj(mapOf("category" to Schema.string())),
+                        Schema.enumeration(listOf("pants", "shirt", "skirt", "dress", "jacket")),
                     ),
                 ),
             )
@@ -109,9 +109,10 @@ class FirebaseAiGarmentDetector : GarmentDetector {
         }.ifBlank { "(הארון ריק)" }
         val categoryCatalog = categories.joinToString("\n") { "- ${it.id}: ${it.name}" }.ifBlank { "(אין קטגוריות)" }
         return """
-            החזירי JSON בלבד בלי שמות ובלי תיאור חופשי.
-            itemIds: רק מזהים מהארון שנראים על האדם. אם שני פריטים דומים ושניהם אפשריים, החזירי את שניהם.
-            unmatched: פריט לבוש שנראה בתמונה ואין לו התאמה בארון. לכל פריט כזה אובייקט עם category בלבד, מזהה מהקטגוריות, או מחרוזת ריקה אם הקטגוריה לא ברורה.
+            החזירי JSON בלבד. בלי שמות, בלי תיאור, ובלי טקסט חופשי.
+            itemIds: רק מזהים מהארון שנראים על האדם, כל מזהה פעם אחת. אם שני פריטים דומים ושניהם אפשריים, החזירי את שניהם.
+            unmatched: רק בגד גדול ומשמעותי שנראה בתמונה ואין לו התאמה בארון. הערכים המותרים בלבד: pants, shirt, skirt, dress, jacket. כל סוג פעם אחת.
+            אל תכללי תכשיטים, שרשרת, משקפיים, צעיף, שעון, נעליים, תיק או אביזר קטן ב-unmatched. אותם מוסיפים ידנית.
             אל תמציאי פריט ארון חדש בתוך itemIds.
             קטגוריות:
             $categoryCatalog

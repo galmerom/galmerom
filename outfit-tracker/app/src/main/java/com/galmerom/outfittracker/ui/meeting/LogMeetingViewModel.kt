@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.galmerom.outfittracker.domain.GarmentDetector
 import com.galmerom.outfittracker.domain.WardrobeDetection
 import com.galmerom.outfittracker.domain.logic.EntitySuggestions
+import com.galmerom.outfittracker.domain.logic.MajorGarment
 import com.galmerom.outfittracker.domain.logic.WardrobeRules
 import com.galmerom.outfittracker.domain.logic.RepeatWarnings
 import com.galmerom.outfittracker.domain.logic.meetingCounts
@@ -232,21 +233,40 @@ class LogMeetingViewModel(
         ).syncSelection()
     }
 
-    fun createEntity() {
-        val name = _state.value.entityQuery.trim()
-        val type = _state.value.newEntityType
-        if (name.isEmpty() || _state.value.creatingEntity) return
+    fun createDetailedEntity(
+        name: String,
+        type: EntityType,
+        description: String,
+        photo: ByteArray?,
+        hidden: Boolean,
+        memberIds: List<String>,
+        onCreated: () -> Unit,
+    ) {
+        val trimmed = name.trim()
+        if (trimmed.isEmpty() || _state.value.creatingEntity) {
+            if (trimmed.isEmpty()) report(UserMessage.NEED_NAME)
+            return
+        }
         viewModelScope.launch {
             _state.update { it.copy(creatingEntity = true) }
-            entities.create(name, type).fold(
+            entities.create(trimmed, type, description, photo).fold(
                 onSuccess = { entity ->
+                    if (hidden) entities.setHidden(entity.id, true)
+                    if (type == EntityType.FORUM && memberIds.isNotEmpty()) {
+                        entities.setMembers(entity.id, memberIds)
+                    }
                     _state.update {
                         it.copy(
                             creatingEntity = false,
-                            selectedEntities = it.selectedEntities + entity,
+                            selectedEntities = it.selectedEntities + entity.copy(
+                                description = description.trim(),
+                                hidden = hidden,
+                                memberIds = if (type == EntityType.FORUM) memberIds else emptyList(),
+                            ),
                             entityQuery = "",
                         )
                     }
+                    onCreated()
                 },
                 onFailure = { error ->
                     _state.update { it.copy(creatingEntity = false) }
@@ -409,9 +429,9 @@ class LogMeetingViewModel(
     }
 
     private fun LogMeetingUiState.withDetection(detection: WardrobeDetection): LogMeetingUiState {
-        val matches = detection.matchedIds.map { id -> AiSuggestion(key = id, itemId = id) }
-        val missing = detection.unmatchedCategories.map { categoryId ->
-            AiSuggestion(key = UUID.randomUUID().toString(), categoryId = categoryId)
+        val matches = detection.matchedIds.distinct().map { id -> AiSuggestion(key = id, itemId = id) }
+        val missing = MajorGarment.distinct(detection.unmatchedCategories).map { categoryId ->
+            AiSuggestion(key = "missing-$categoryId", categoryId = categoryId)
         }
         val suggestions = matches + missing
         return copy(

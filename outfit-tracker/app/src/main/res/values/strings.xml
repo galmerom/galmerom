@@ -54,7 +54,7 @@
     <string name="wardrobe_hidden">פריטים מוסתרים</string>
     <string name="wardrobe_hidden_empty">אין פריטים מוסתרים.</string>
     <string name="clothing_new_title">פריט חדש</string>
-    <string name="clothing_edit_title">עריכת פריט</string>
+    <string name="clothing_edit_title">עריכת פריט לבוש</string>
     <string name="clothing_description">תיאור</string>
     <string name="clothing_category">קטגוריה</string>
     <string name="clothing_hidden">הסתרה מהבחירה</string>
@@ -104,7 +104,7 @@
     <string name="clothes_selected">נבחרו</string>
     <string name="clothes_remove">הסרה מהמפגש</string>
     <string name="clothes_none_selected">עדיין לא נבחרו פרטי לבוש.</string>
-    <string name="ai_section">זיהוי מתמונה</string>
+    <string name="ai_section">לזיהוי פרטי לבוש מתמונה</string>
     <string name="ai_detect">זיהוי פרטי לבוש</string>
     <string name="ai_detecting">מזהה…</string>
     <string name="ai_no_match">לא נמצאו פריטים מתאימים</string>
@@ -124,6 +124,12 @@
     <string name="meeting_saved">המפגש נשמר</string>
     <string name="meeting_saved_home">הפגישה נשמרה</string>
     <string name="ai_not_in_wardrobe">לא נמצא בארון</string>
+    <string name="ai_missing_garment">לא זיהיתי את %1$s</string>
+    <string name="title_add_meeting">הוסף פגישה</string>
+    <string name="title_edit_meeting">עריכת פגישה</string>
+    <string name="title_edit_entity">עריכת איש/פורום</string>
+    <string name="home_entities">אנשים/פורומים</string>
+    <string name="enlarge_photo">הגדלת תמונה</string>
     <string name="dismiss_suggestion">הסרת הצעה</string>
     <string name="save_with_suggestions">יש פריטים מוצעים שלא אושרו, לשמור בכל זאת?</string>
     <string name="cancel_meeting">לבטל את הפגישה?</string>

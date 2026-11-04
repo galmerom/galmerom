@@ -31,7 +31,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -99,12 +99,14 @@ fun EntityListScreen(
         containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
-            TopAppBar(
+            CenterAlignedTopAppBar(
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background,
                     titleContentColor = MaterialTheme.colorScheme.onBackground,
                 ),
-                title = { Text(stringResource(R.string.entities_title)) },
+                title = {
+                    Text(stringResource(R.string.entities_title), style = MaterialTheme.typography.headlineSmall)
+                },
                 actions = {
                     Button(
                         onClick = onHome,
@@ -214,6 +216,7 @@ fun HiddenEntitiesScreen(onBack: () -> Unit) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EntityEditScreen(entityId: String, onBack: () -> Unit, onSaved: () -> Unit) {
     val repo = LocalAppContainer.current.entityRepository ?: return
@@ -229,6 +232,26 @@ fun EntityEditScreen(entityId: String, onBack: () -> Unit, onSaved: () -> Unit) 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbar) },
+        topBar = {
+            CenterAlignedTopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    titleContentColor = MaterialTheme.colorScheme.onBackground,
+                ),
+                title = {
+                    Text(
+                        stringResource(
+                            if (entityId == EntityEditViewModel.NEW) {
+                                R.string.entity_new_title
+                            } else {
+                                R.string.title_edit_entity
+                            },
+                        ),
+                        style = MaterialTheme.typography.headlineSmall,
+                    )
+                },
+            )
+        },
     ) { padding ->
         Column(
             Modifier

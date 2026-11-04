@@ -120,6 +120,15 @@ class DomainLogicTest {
     }
 
     @Test
+    fun majorGarment_keepsOnlyLargeTypesOnce() {
+        assertEquals("jacket", MajorGarment.normalize("coat"))
+        assertNull(MajorGarment.normalize("scarf"))
+        assertNull(MajorGarment.normalize("משקפיים"))
+        assertEquals(listOf("pants", "shirt"), MajorGarment.distinct(listOf("pants", "pants", "watch", "shirt")))
+        assertEquals("המכנסיים", MajorGarment.caption("pants"))
+    }
+
+    @Test
     fun meetingForm_isDirtyWhenAnythingWasEntered() {
         val empty = com.galmerom.outfittracker.ui.meeting.LogMeetingUiState()
         assertFalse(empty.hasEnteredData(java.time.LocalDate.now()))
