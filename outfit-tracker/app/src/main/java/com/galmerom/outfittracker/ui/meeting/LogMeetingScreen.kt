@@ -49,6 +49,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.galmerom.outfittracker.R
 import com.galmerom.outfittracker.domain.logic.Dates
+import com.galmerom.outfittracker.domain.logic.RepeatWarning
 import com.galmerom.outfittracker.domain.model.ClothingCategory
 import com.galmerom.outfittracker.domain.model.EntityType
 import com.galmerom.outfittracker.ui.LocalAppContainer
@@ -69,7 +70,7 @@ import com.galmerom.outfittracker.ui.viewModelFactory
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-fun LogMeetingScreen() {
+fun LogMeetingScreen(meetingId: String? = null) {
     val container = LocalAppContainer.current
     val clothing = container.clothingRepository ?: return
     val entities = container.entityRepository ?: return
@@ -77,7 +78,10 @@ fun LogMeetingScreen() {
     val categoriesRepo = container.categoryRepository ?: return
     val detector = container.detector ?: return
     val viewModel: LogMeetingViewModel = viewModel(
-        factory = viewModelFactory { LogMeetingViewModel(clothing, entities, meetings, categoriesRepo, detector) },
+        key = meetingId ?: "new",
+        factory = viewModelFactory {
+            LogMeetingViewModel(clothing, entities, meetings, categoriesRepo, detector, meetingId)
+        },
     )
     val state by viewModel.state.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
@@ -130,16 +134,21 @@ fun LogMeetingScreen() {
                     ClearTextButton(state.entityQuery.isNotEmpty()) { viewModel.onQuery("") }
                 },
             )
-            state.selectedEntity?.let { selected ->
-                Text(
-                    stringResource(R.string.entity_selected, selected.name),
-                    color = MaterialTheme.colorScheme.primary,
-                    style = MaterialTheme.typography.titleSmall,
-                )
-                TextButton(onClick = viewModel::clearEntity) {
-                    Text(stringResource(R.string.entity_clear))
+            if (state.selectedEntities.isNotEmpty()) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    state.selectedEntities.forEach { selected ->
+                        InputChip(
+                            selected = true,
+                            onClick = { viewModel.removeEntity(selected.id) },
+                            label = { Text(selected.name) },
+                        )
+                    }
                 }
             }
+            Text(
+                stringResource(R.string.add_entity, entityLabel),
+                style = MaterialTheme.typography.titleSmall,
+            )
             state.suggestions.forEach { entity ->
                 Card(
                     onClick = { viewModel.selectEntity(entity) },
@@ -234,11 +243,20 @@ fun LogMeetingScreen() {
             } else {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     selected.forEach { item ->
-                        InputChip(
-                            selected = true,
-                            onClick = { viewModel.removeClothing(item.id) },
-                            label = { Text(item.description) },
-                        )
+                        Column {
+                            InputChip(
+                                selected = true,
+                                onClick = { viewModel.removeClothing(item.id) },
+                                label = { Text(item.description) },
+                            )
+                            state.warnings[item.id]?.let { warning ->
+                                Text(
+                                    warningText(warning),
+                                    color = MaterialTheme.colorScheme.error,
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -256,6 +274,14 @@ fun LogMeetingScreen() {
                 minLines = 2,
             )
             Text(stringResource(R.string.meeting_photo), style = MaterialTheme.typography.titleSmall)
+            if (state.meetingPhoto == null && !state.existingPhotoUrl.isNullOrBlank()) {
+                ClothingImage(
+                    jpeg = null,
+                    url = state.existingPhotoUrl,
+                    description = stringResource(R.string.meeting_photo_description),
+                    modifier = Modifier.fillMaxWidth().height(160.dp),
+                )
+            }
             PhotoBlock(
                 jpeg = state.meetingPhoto,
                 description = stringResource(R.string.meeting_photo_description),
@@ -307,6 +333,16 @@ fun LogMeetingScreen() {
                 showManual = false
             },
         )
+    }
+}
+
+@Composable
+private fun warningText(warning: RepeatWarning): String {
+    val date = warning.date.toHebrewDate()
+    return if (warning.extraCount > 0) {
+        stringResource(R.string.repeat_warning_more, warning.entityName, date, warning.extraCount)
+    } else {
+        stringResource(R.string.repeat_warning, warning.entityName, date)
     }
 }
 

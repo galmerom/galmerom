@@ -1,8 +1,15 @@
 package com.galmerom.outfittracker.ui.navigation
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.outlined.DateRange
@@ -47,6 +54,7 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -76,7 +84,9 @@ import com.galmerom.outfittracker.ui.wardrobe.WardrobeScreen
 import kotlinx.coroutines.launch
 
 private object Routes {
+    const val HOME = "home"
     const val LOG = "log"
+    const val LOG_EDIT = "log/{meetingId}"
     const val SEARCH = "search"
     const val WARDROBE = "wardrobe"
     const val HIDDEN = "wardrobe/hidden"
@@ -157,10 +167,11 @@ private fun AppScaffold(user: SignedInUser) {
     val navController = rememberNavController()
     val backStack by navController.currentBackStackEntryAsState()
     val route = backStack?.destination?.route
-    val topLevel = route == Routes.LOG || route == Routes.SEARCH || route == Routes.WARDROBE
+    val topLevel = route == Routes.LOG || route == Routes.LOG_EDIT || route == Routes.SEARCH || route == Routes.WARDROBE
+    val showHomeButton = topLevel && route != Routes.HOME
     val scope = rememberCoroutineScope()
     val drawerState = rememberDrawerState(DrawerValue.Closed)
-    val fontSize by container.fontSettings.choice.collectAsStateWithLifecycle(FontSize.REGULAR)
+    val prefs by container.preferences.prefs.collectAsStateWithLifecycle(com.galmerom.outfittracker.data.UserPrefs())
     val entityLabel = stringResource(R.string.entity_label)
     val barColors = NavigationBarItemDefaults.colors(
         selectedIconColor = MaterialTheme.colorScheme.primary,
@@ -197,8 +208,13 @@ private fun AppScaffold(user: SignedInUser) {
                         },
                     )
                     Text(stringResource(R.string.font_size), style = MaterialTheme.typography.titleSmall)
-                    RowFontSizes(fontSize) { size ->
-                        scope.launch { container.fontSettings.set(size) }
+                    RowFontSizes(prefs.fontSize) { size ->
+                        container.preferences.setFontSize(size)
+                        container.syncPreferences()
+                    }
+                    ThemePicker(prefs.theme) { theme ->
+                        container.preferences.setTheme(theme)
+                        container.syncPreferences()
                     }
                     TextButton(onClick = { scope.launch { container.authRepository?.signOut() } }) {
                         Text(stringResource(R.string.sign_out))
@@ -210,7 +226,7 @@ private fun AppScaffold(user: SignedInUser) {
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            if (topLevel) {
+            if (topLevel || route == Routes.HOME) {
                 TopAppBar(
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = MaterialTheme.colorScheme.background,
@@ -222,6 +238,20 @@ private fun AppScaffold(user: SignedInUser) {
                         }
                     },
                     title = { Text(stringResource(R.string.app_name), style = MaterialTheme.typography.titleLarge) },
+                    actions = {
+                        if (showHomeButton) {
+                            TextButton(
+                                onClick = {
+                                    navController.navigate(Routes.HOME) {
+                                        popUpTo(Routes.HOME) { inclusive = false }
+                                        launchSingleTop = true
+                                    }
+                                },
+                            ) {
+                                Text(stringResource(R.string.back_home))
+                            }
+                        }
+                    },
                 )
             }
         },
@@ -232,7 +262,7 @@ private fun AppScaffold(user: SignedInUser) {
                     tonalElevation = 3.dp,
                 ) {
                     NavigationBarItem(
-                        selected = route == Routes.LOG,
+                        selected = route == Routes.LOG || route == Routes.LOG_EDIT,
                         onClick = { navController.openTopLevel(Routes.LOG) },
                         colors = barColors,
                         icon = { Icon(Icons.Outlined.DateRange, contentDescription = null) },
@@ -263,11 +293,29 @@ private fun AppScaffold(user: SignedInUser) {
     ) { padding ->
         NavHost(
             navController = navController,
-            startDestination = Routes.LOG,
+            startDestination = Routes.HOME,
             modifier = Modifier.padding(padding),
         ) {
+            composable(Routes.HOME) {
+                HomeScreen(
+                    onNewMeeting = { navController.navigate(Routes.LOG) },
+                    onSearch = { navController.navigate(Routes.SEARCH) },
+                    onWardrobe = { navController.navigate(Routes.WARDROBE) },
+                )
+            }
             composable(Routes.LOG) { LogMeetingScreen() }
-            composable(Routes.SEARCH) { SearchScreen(onOpenMeeting = { navController.navigate(Routes.detail(it)) }) }
+            composable(
+                route = Routes.LOG_EDIT,
+                arguments = listOf(navArgument("meetingId") { type = NavType.StringType }),
+            ) { entry ->
+                LogMeetingScreen(meetingId = entry.arguments?.getString("meetingId"))
+            }
+            composable(Routes.SEARCH) {
+                SearchScreen(
+                    onOpenMeeting = { navController.navigate(Routes.detail(it)) },
+                    onEditMeeting = { navController.navigate("log/$it") },
+                )
+            }
             composable(Routes.WARDROBE) {
                 WardrobeScreen(
                     onAdd = { navController.navigate(Routes.edit(ClothingEditViewModel.NEW_ID)) },
@@ -292,6 +340,7 @@ private fun AppScaffold(user: SignedInUser) {
                 MeetingDetailScreen(
                     meetingId = entry.arguments?.getString("meetingId").orEmpty(),
                     onBack = { navController.popBackStack() },
+                    onEdit = { navController.navigate("log/$it") },
                 )
             }
             composable(Routes.ENTITIES) {
@@ -319,6 +368,70 @@ private fun AppScaffold(user: SignedInUser) {
         }
     }
     }
+}
+
+@Composable
+private fun HomeScreen(onNewMeeting: () -> Unit, onSearch: () -> Unit, onWardrobe: () -> Unit) {
+    Column(
+        modifier = Modifier.fillMaxSize().padding(24.dp),
+        verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(16.dp),
+    ) {
+        Text(stringResource(R.string.hello), style = MaterialTheme.typography.headlineMedium)
+        HomeButton(stringResource(R.string.home_new_meeting), onNewMeeting)
+        HomeButton(stringResource(R.string.nav_search), onSearch)
+        HomeButton(stringResource(R.string.nav_wardrobe), onWardrobe)
+    }
+}
+
+@Composable
+private fun HomeButton(label: String, onClick: () -> Unit) {
+    androidx.compose.material3.Button(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth().height(72.dp),
+        shape = MaterialTheme.shapes.large,
+    ) {
+        Text(label, style = MaterialTheme.typography.titleLarge)
+    }
+}
+
+@Composable
+private fun ThemePicker(selected: com.galmerom.outfittracker.data.AppTheme, onSelect: (com.galmerom.outfittracker.data.AppTheme) -> Unit) {
+    Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp)) {
+        com.galmerom.outfittracker.data.AppTheme.entries.forEach { theme ->
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(androidx.compose.foundation.shape.CircleShape)
+                        .background(themeSwatch(theme))
+                        .border(
+                            width = if (theme == selected) 3.dp else 1.dp,
+                            color = if (theme == selected) MaterialTheme.colorScheme.onBackground else MaterialTheme.colorScheme.outline,
+                            shape = androidx.compose.foundation.shape.CircleShape,
+                        )
+                        .clickable { onSelect(theme) },
+                )
+                Text(themeLabel(theme), style = MaterialTheme.typography.labelLarge)
+            }
+        }
+    }
+}
+
+@Composable
+private fun themeLabel(theme: com.galmerom.outfittracker.data.AppTheme): String = when (theme) {
+    com.galmerom.outfittracker.data.AppTheme.WARM -> stringResource(R.string.theme_warm)
+    com.galmerom.outfittracker.data.AppTheme.OCEAN -> stringResource(R.string.theme_ocean)
+    com.galmerom.outfittracker.data.AppTheme.SAGE -> stringResource(R.string.theme_sage)
+    com.galmerom.outfittracker.data.AppTheme.LILAC -> stringResource(R.string.theme_lilac)
+    com.galmerom.outfittracker.data.AppTheme.NIGHT -> stringResource(R.string.theme_night)
+}
+
+private fun themeSwatch(theme: com.galmerom.outfittracker.data.AppTheme) = when (theme) {
+    com.galmerom.outfittracker.data.AppTheme.WARM -> com.galmerom.outfittracker.ui.theme.Accent
+    com.galmerom.outfittracker.data.AppTheme.OCEAN -> com.galmerom.outfittracker.ui.theme.Ocean
+    com.galmerom.outfittracker.data.AppTheme.SAGE -> com.galmerom.outfittracker.ui.theme.Sage
+    com.galmerom.outfittracker.data.AppTheme.LILAC -> com.galmerom.outfittracker.ui.theme.Lilac
+    com.galmerom.outfittracker.data.AppTheme.NIGHT -> com.galmerom.outfittracker.ui.theme.NightBackground
 }
 
 @Composable

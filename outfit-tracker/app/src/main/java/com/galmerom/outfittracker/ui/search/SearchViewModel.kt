@@ -24,10 +24,12 @@ import kotlinx.coroutines.launch
 data class SearchUiState(
     val query: String = "",
     val pages: Int = 1,
+    val includeHidden: Boolean = false,
     val meetings: List<Meeting> = emptyList(),
     val entities: List<Entity> = emptyList(),
 ) {
-    val filtered: List<MeetingHit> get() = MeetingSearch.search(meetings, entities, query)
+    val filtered: List<MeetingHit>
+        get() = MeetingSearch.search(meetings, entities, query, includeHidden)
     val visible: List<MeetingHit> get() = filtered.take(pages.coerceAtLeast(1) * MeetingWindow.PAGE_SIZE)
     val hasMore: Boolean get() = filtered.size > pages.coerceAtLeast(1) * MeetingWindow.PAGE_SIZE
 }
@@ -57,6 +59,8 @@ class SearchViewModel(
 
     fun onQuery(value: String) = _state.update { it.copy(query = value, pages = 1) }
 
+    fun setIncludeHidden(value: Boolean) = _state.update { it.copy(includeHidden = value, pages = 1) }
+
     fun showMore() = _state.update { it.copy(pages = it.pages + 1) }
 }
 
@@ -68,7 +72,7 @@ data class MeetingDetailUiState(
 
 class MeetingDetailViewModel(
     private val meetingId: String,
-    meetings: MeetingRepository,
+    private val meetings: MeetingRepository,
     clothing: ClothingRepository,
 ) : ViewModel() {
     private val _state = MutableStateFlow(MeetingDetailUiState())
@@ -76,6 +80,16 @@ class MeetingDetailViewModel(
 
     private val _messages = MutableSharedFlow<UserMessage>(extraBufferCapacity = 8)
     val messages = _messages.asSharedFlow()
+
+    fun setHidden(hidden: Boolean) {
+        viewModelScope.launch { meetings.setHidden(meetingId, hidden) }
+    }
+
+    fun delete(onDone: () -> Unit) {
+        viewModelScope.launch {
+            meetings.delete(meetingId).onSuccess { onDone() }
+        }
+    }
 
     init {
         viewModelScope.launch {

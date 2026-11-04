@@ -196,19 +196,47 @@ class FirestoreMeetingRepository(
                 outcome = SaveOutcome.SAVED_WITHOUT_PHOTO
             }
         }
-        val fields = mapOf(
-            "date" to Dates.formatIso(draft.date),
-            "entityId" to draft.entityId,
-            "entityName" to draft.entityName,
-            "clothingItemIds" to draft.clothingItemIds,
-            "photoUrl" to photoUrl,
-            "note" to draft.note.trim(),
-        )
         return firestore.userCollection(uid, MEETINGS)
             .document(id)
-            .set(fields)
+            .set(draft.toFields(photoUrl, hidden = false))
             .awaitCommitted()
             .map { outcome }
+    }
+
+    override suspend fun update(
+        id: String,
+        draft: MeetingDraft,
+        photoJpeg: ByteArray?,
+        keepPhotoUrl: String?,
+    ): Result<SaveOutcome> {
+        val uid = auth.currentUser?.uid ?: return Result.failure(IllegalStateException("signed out"))
+        var photoUrl = keepPhotoUrl
+        var outcome = SaveOutcome.SAVED
+        if (photoJpeg != null) {
+            val uploaded = runCatching { photos.upload("users/$uid/meetings/$id.jpg", photoJpeg) }
+            if (uploaded.isSuccess) {
+                photoUrl = uploaded.getOrThrow()
+            } else {
+                val error = uploaded.exceptionOrNull()
+                if (error?.errorKind() == ErrorKind.PERMISSION) return Result.failure(error)
+                outcome = SaveOutcome.SAVED_WITHOUT_PHOTO
+            }
+        }
+        return firestore.userCollection(uid, MEETINGS)
+            .document(id)
+            .set(draft.toFields(photoUrl, hidden = null), com.google.firebase.firestore.SetOptions.merge())
+            .awaitCommitted()
+            .map { outcome }
+    }
+
+    override suspend fun delete(id: String): Result<Unit> {
+        val uid = auth.currentUser?.uid ?: return Result.failure(IllegalStateException("signed out"))
+        return firestore.userCollection(uid, MEETINGS).document(id).delete().awaitCommitted()
+    }
+
+    override suspend fun setHidden(id: String, hidden: Boolean): Result<Unit> {
+        val uid = auth.currentUser?.uid ?: return Result.failure(IllegalStateException("signed out"))
+        return firestore.userCollection(uid, MEETINGS).document(id).update("hidden", hidden).awaitCommitted()
     }
 
     private companion object {
@@ -323,18 +351,39 @@ private fun DocumentSnapshot.toEntity(): Entity? {
     )
 }
 
+private fun MeetingDraft.toFields(photoUrl: String?, hidden: Boolean?): Map<String, Any?> = buildMap {
+    put("date", Dates.formatIso(date))
+    put("entityIds", entityIds)
+    put("entityNames", entityNames)
+    put("entityId", entityIds.firstOrNull().orEmpty())
+    put("entityName", entityNames.firstOrNull().orEmpty())
+    put("clothingItemIds", clothingItemIds)
+    put("photoUrl", photoUrl)
+    put("note", note.trim())
+    if (hidden != null) put("hidden", hidden)
+}
+
 private fun DocumentSnapshot.toMeeting(): Meeting? {
     val date = Dates.parseIso(getString("date")) ?: return null
-    val entityId = getString("entityId").orEmpty()
-    if (entityId.isEmpty()) return null
-    val ids = (get("clothingItemIds") as? List<*>)?.mapNotNull { it as? String }.orEmpty()
+    val listedIds = (get("entityIds") as? List<*>)?.mapNotNull { it as? String }.orEmpty()
+    val legacyId = getString("entityId")?.takeIf { it.isNotBlank() }
+    val entityIds = listedIds.ifEmpty { listOfNotNull(legacyId) }
+    if (entityIds.isEmpty()) return null
+    val listedNames = (get("entityNames") as? List<*>)?.mapNotNull { it as? String }.orEmpty()
+    val legacyName = getString("entityName").orEmpty()
+    val entityNames = when {
+        listedNames.isNotEmpty() -> entityIds.mapIndexed { index, _ -> listedNames.getOrNull(index).orEmpty() }
+        else -> entityIds.mapIndexed { index, _ -> if (index == 0) legacyName else "" }
+    }
+    val clothingIds = (get("clothingItemIds") as? List<*>)?.mapNotNull { it as? String }.orEmpty()
     return Meeting(
         id = id,
         date = date,
-        entityId = entityId,
-        entityName = getString("entityName").orEmpty(),
-        clothingItemIds = ids,
+        entityIds = entityIds,
+        entityNames = entityNames,
+        clothingItemIds = clothingIds,
         photoUrl = getString("photoUrl")?.takeIf { it.isNotBlank() },
         note = getString("note").orEmpty(),
+        hidden = getBoolean("hidden") ?: false,
     )
 }

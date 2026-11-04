@@ -129,8 +129,8 @@ class DomainLogicTest {
     private fun meeting(id: String, date: LocalDate, entityName: String) = Meeting(
         id = id,
         date = date,
-        entityId = id,
-        entityName = entityName,
+        entityIds = listOf(id),
+        entityNames = listOf(entityName),
         clothingItemIds = emptyList(),
         photoUrl = null,
         note = "",
@@ -155,9 +155,9 @@ class DomainLogicTest {
         val dana = Entity("p1", "דנה", EntityType.PERSON)
         val forum = Entity("f1", "פורום בוקר", EntityType.FORUM, memberIds = listOf("p1"))
         val meetings = listOf(
-            meeting("own", LocalDate.of(2026, 1, 1), "דנה").copy(entityId = "p1"),
-            meeting("group", LocalDate.of(2026, 2, 1), "פורום בוקר").copy(entityId = "f1"),
-            meeting("other", LocalDate.of(2026, 3, 1), "מיכל").copy(entityId = "p2"),
+            meeting("own", LocalDate.of(2026, 1, 1), "דנה").copy(entityIds = listOf("p1"), entityNames = listOf("דנה")),
+            meeting("group", LocalDate.of(2026, 2, 1), "פורום בוקר").copy(entityIds = listOf("f1"), entityNames = listOf("פורום בוקר")),
+            meeting("other", LocalDate.of(2026, 3, 1), "מיכל").copy(entityIds = listOf("p2"), entityNames = listOf("מיכל")),
         )
         val hits = MeetingSearch.search(meetings, listOf(dana, forum), "דנה")
         assertEquals(listOf("group", "own"), hits.map { it.meeting.id })
@@ -165,5 +165,62 @@ class DomainLogicTest {
         val forumHits = MeetingSearch.search(meetings, listOf(dana, forum), "בוקר")
         assertEquals(listOf("group"), forumHits.map { it.meeting.id })
         assertNull(forumHits.first().forumName)
+    }
+
+    @Test
+    fun repeatWarning_matchesPersonForumAndSkipsHiddenAndSelf() {
+        val roee = Entity("p1", "רועי", EntityType.PERSON)
+        val forum = Entity("f1", "פורום", EntityType.FORUM, memberIds = listOf("p1"))
+        val older = Meeting(
+            id = "old",
+            date = LocalDate.of(2026, 3, 1),
+            entityIds = listOf("p1"),
+            entityNames = listOf("רועי"),
+            clothingItemIds = listOf("shirt"),
+            photoUrl = null,
+            note = "",
+        )
+        val newer = older.copy(id = "new", date = LocalDate.of(2026, 3, 12), entityIds = listOf("f1"), entityNames = listOf("פורום"))
+        val hidden = newer.copy(id = "hid", date = LocalDate.of(2026, 4, 1), hidden = true)
+        val self = newer.copy(id = "self", date = LocalDate.of(2026, 5, 1))
+        val warning = RepeatWarnings.forSelection(
+            selectedEntityIds = setOf("p1"),
+            selectedItemIds = setOf("shirt"),
+            entities = listOf(roee, forum),
+            meetings = listOf(older, newer, hidden, self),
+            excludeMeetingId = "self",
+        ).getValue("shirt")
+        assertEquals("פורום", warning.entityName)
+        assertEquals(LocalDate.of(2026, 3, 12), warning.date)
+        assertEquals(1, warning.extraCount)
+        val none = RepeatWarnings.forSelection(
+            selectedEntityIds = setOf("p1"),
+            selectedItemIds = setOf("shirt"),
+            entities = listOf(roee, forum),
+            meetings = listOf(hidden),
+        )
+        assertTrue(none.isEmpty())
+    }
+
+    @Test
+    fun meetingRead_keepsLegacySingleEntityAsAList() {
+        val legacy = Meeting(
+            id = "m",
+            date = LocalDate.of(2026, 11, 4),
+            entityIds = listOf("p1"),
+            entityNames = listOf("דנה"),
+            clothingItemIds = emptyList(),
+            photoUrl = null,
+            note = "",
+        )
+        assertEquals("p1", legacy.entityId)
+        assertEquals("04-11-26", legacy.date.format(java.time.format.DateTimeFormatter.ofPattern("dd-MM-yy")))
+        val hiddenFiltered = MeetingSearch.search(
+            meetings = listOf(legacy.copy(hidden = true), legacy.copy(id = "visible")),
+            entities = emptyList(),
+            query = "",
+            includeHidden = false,
+        )
+        assertEquals(listOf("visible"), hiddenFiltered.map { it.meeting.id })
     }
 }

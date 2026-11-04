@@ -4,8 +4,20 @@ import android.content.Context
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.map
+import com.galmerom.outfittracker.data.awaitCommitted
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.SetOptions
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withTimeoutOrNull
 
 enum class FontSize(val key: String, val scale: Float) {
     REGULAR("regular", 1f),
@@ -18,15 +30,102 @@ enum class FontSize(val key: String, val scale: Float) {
     }
 }
 
+enum class AppTheme(val key: String, val dark: Boolean) {
+    WARM("warm", false),
+    OCEAN("ocean", false),
+    SAGE("sage", false),
+    LILAC("lilac", false),
+    NIGHT("night", true),
+    ;
+
+    companion object {
+        fun fromKey(value: String?): AppTheme = entries.firstOrNull { it.key == value } ?: WARM
+    }
+}
+
+data class UserPrefs(
+    val fontSize: FontSize = FontSize.REGULAR,
+    val theme: AppTheme = AppTheme.WARM,
+)
+
 private val Context.settingsDataStore by preferencesDataStore(name = "outfit_tracker_settings")
 
-class FontSettings(context: Context) {
+class UserPreferences(context: Context) {
     private val store = context.applicationContext.settingsDataStore
-    private val key = stringPreferencesKey("font_size")
+    private val fontKey = stringPreferencesKey("font_size")
+    private val themeKey = stringPreferencesKey("theme")
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val cached = MutableStateFlow(readCached())
+    private var accountSyncStarted = false
 
-    val choice: Flow<FontSize> = store.data.map { prefs -> FontSize.fromKey(prefs[key]) }
+    val prefs: StateFlow<UserPrefs> = cached
 
-    suspend fun set(size: FontSize) {
-        store.edit { prefs -> prefs[key] = size.key }
+    fun setFontSize(size: FontSize) {
+        update(cached.value.copy(fontSize = size))
+    }
+
+    fun setTheme(theme: AppTheme) {
+        update(cached.value.copy(theme = theme))
+    }
+
+    fun startAccountSync(firestore: FirebaseFirestore, auth: FirebaseAuth) {
+        if (accountSyncStarted) return
+        val uid = auth.currentUser?.uid ?: return
+        accountSyncStarted = true
+        val doc = firestore.collection("users").document(uid).collection("settings").document("preferences")
+        scope.launch {
+            val snapshot = runCatching { doc.get().await() }.getOrNull() ?: return@launch
+            if (!snapshot.exists()) {
+                push(doc)
+                return@launch
+            }
+            applyRemote(snapshot.getString("fontSize"), snapshot.getString("theme"))
+        }
+        doc.addSnapshotListener { snapshot, _ ->
+            if (snapshot == null || !snapshot.exists()) return@addSnapshotListener
+            applyRemote(snapshot.getString("fontSize"), snapshot.getString("theme"))
+        }
+    }
+
+    fun pushToAccount(firestore: FirebaseFirestore, auth: FirebaseAuth) {
+        val uid = auth.currentUser?.uid ?: return
+        val doc = firestore.collection("users").document(uid).collection("settings").document("preferences")
+        scope.launch { push(doc) }
+    }
+
+    private fun update(next: UserPrefs) {
+        cached.value = next
+        scope.launch {
+            store.edit { prefs ->
+                prefs[fontKey] = next.fontSize.key
+                prefs[themeKey] = next.theme.key
+            }
+        }
+    }
+
+    private fun applyRemote(font: String?, theme: String?) {
+        val next = UserPrefs(FontSize.fromKey(font), AppTheme.fromKey(theme))
+        if (next != cached.value) update(next)
+    }
+
+    private suspend fun push(doc: com.google.firebase.firestore.DocumentReference) {
+        val current = cached.value
+        doc.set(
+            mapOf(
+                "fontSize" to current.fontSize.key,
+                "theme" to current.theme.key,
+            ),
+            SetOptions.merge(),
+        ).awaitCommitted()
+    }
+
+    private fun readCached(): UserPrefs = runBlocking {
+        withTimeoutOrNull(400) {
+            val prefs = store.data.first()
+            UserPrefs(
+                fontSize = FontSize.fromKey(prefs[fontKey]),
+                theme = AppTheme.fromKey(prefs[themeKey]),
+            )
+        } ?: UserPrefs()
     }
 }

@@ -5,8 +5,6 @@ import com.galmerom.outfittracker.R
 import com.galmerom.outfittracker.domain.model.EntityType
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
-import java.time.format.FormatStyle
-import java.util.Locale
 
 @StringRes
 fun EntityType.labelRes(): Int = when (this) {
@@ -14,8 +12,6 @@ fun EntityType.labelRes(): Int = when (this) {
     EntityType.FORUM -> R.string.entity_type_forum
 }
 
-private val hebrewDate: DateTimeFormatter = DateTimeFormatter
-    .ofLocalizedDate(FormatStyle.MEDIUM)
-    .withLocale(Locale.forLanguageTag("he-IL"))
+private val displayDate: DateTimeFormatter = DateTimeFormatter.ofPattern("dd-MM-yy")
 
-fun LocalDate.toHebrewDate(): String = format(hebrewDate)
+fun LocalDate.toHebrewDate(): String = format(displayDate)

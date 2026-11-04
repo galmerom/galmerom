@@ -44,4 +44,7 @@ interface CategoryRepository {
 interface MeetingRepository {
     fun observeAll(): Flow<List<Meeting>>
     suspend fun log(draft: MeetingDraft, photoJpeg: ByteArray?): Result<SaveOutcome>
+    suspend fun update(id: String, draft: MeetingDraft, photoJpeg: ByteArray?, keepPhotoUrl: String?): Result<SaveOutcome>
+    suspend fun delete(id: String): Result<Unit>
+    suspend fun setHidden(id: String, hidden: Boolean): Result<Unit>
 }

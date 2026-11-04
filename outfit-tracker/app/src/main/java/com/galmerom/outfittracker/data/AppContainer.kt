@@ -16,7 +16,9 @@ import com.galmerom.outfittracker.domain.repository.EntityRepository
 import com.galmerom.outfittracker.domain.repository.MeetingRepository
 import com.google.firebase.Firebase
 import com.google.firebase.FirebaseApp
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.auth
+import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.firestore
 import com.google.firebase.firestore.firestoreSettings
 import com.google.firebase.firestore.persistentCacheSettings
@@ -36,11 +38,19 @@ class AppContainer(context: Context) {
     val meetingRepository: MeetingRepository?
     val categoryRepository: CategoryRepository?
     val detector: GarmentDetector?
-    val fontSettings: FontSettings
+    val preferences: UserPreferences
+    private var firestoreRef: FirebaseFirestore? = null
+    private var authRef: FirebaseAuth? = null
+
+    fun syncPreferences() {
+        val firestore = firestoreRef ?: return
+        val auth = authRef ?: return
+        preferences.pushToAccount(firestore, auth)
+    }
 
     init {
         val appContext = context.applicationContext
-        fontSettings = FontSettings(appContext)
+        preferences = UserPreferences(appContext)
         if (!FirebaseConfig.isConfigured(appContext)) {
             status = FirebaseStatus.MissingConfig
             authRepository = null
@@ -62,12 +72,14 @@ class AppContainer(context: Context) {
                 detector = null
             } else {
                 val firestore = Firebase.firestore
+                firestoreRef = firestore
                 runCatching {
                     firestore.firestoreSettings = firestoreSettings {
                         setLocalCacheSettings(persistentCacheSettings {})
                     }
                 }
                 val auth = Firebase.auth
+                authRef = auth
                 val photos = FirebasePhotoStorage(Firebase.storage)
                 val webClientId = FirebaseConfig.webClientId(appContext)
                 status = if (webClientId == null) FirebaseStatus.MissingWebClient else FirebaseStatus.Ready
@@ -77,6 +89,11 @@ class AppContainer(context: Context) {
                 meetingRepository = FirestoreMeetingRepository(firestore, auth, photos)
                 categoryRepository = FirestoreCategoryRepository(firestore, auth)
                 detector = FirebaseAiGarmentDetector()
+                auth.addAuthStateListener { firebaseAuth ->
+                    if (firebaseAuth.currentUser != null) {
+                        preferences.startAccountSync(firestore, auth)
+                    }
+                }
             }
         }
     }

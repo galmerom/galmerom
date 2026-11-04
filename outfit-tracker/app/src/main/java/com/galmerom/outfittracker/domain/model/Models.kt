@@ -59,17 +59,23 @@ data class ClothingItem(
 data class Meeting(
     val id: String,
     val date: LocalDate,
-    val entityId: String,
-    val entityName: String,
+    val entityIds: List<String>,
+    val entityNames: List<String>,
     val clothingItemIds: List<String>,
     val photoUrl: String?,
     val note: String,
-)
+    val hidden: Boolean = false,
+) {
+    val entityId: String get() = entityIds.firstOrNull().orEmpty()
+    val entityName: String get() = displayNames()
+
+    fun displayNames(): String = entityNames.filter { it.isNotBlank() }.joinToString(", ")
+}
 
 data class MeetingDraft(
     val date: LocalDate,
-    val entityId: String,
-    val entityName: String,
+    val entityIds: List<String>,
+    val entityNames: List<String>,
     val clothingItemIds: List<String>,
     val note: String,
 )

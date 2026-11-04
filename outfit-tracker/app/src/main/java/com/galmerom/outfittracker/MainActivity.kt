@@ -9,8 +9,9 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.graphics.toArgb
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.galmerom.outfittracker.data.FontSize
+import com.galmerom.outfittracker.data.UserPrefs
 import com.galmerom.outfittracker.ui.LocalAppContainer
+import com.galmerom.outfittracker.ui.LocalAppTheme
 import com.galmerom.outfittracker.ui.LocalFontScale
 import com.galmerom.outfittracker.ui.navigation.OutfitTrackerRoot
 import com.galmerom.outfittracker.ui.theme.CardWhite
@@ -28,10 +29,11 @@ class MainActivity : ComponentActivity() {
         )
         val container = (application as OutfitTrackerApplication).container
         setContent {
-            val fontSize by container.fontSettings.choice.collectAsStateWithLifecycle(FontSize.REGULAR)
+            val prefs by container.preferences.prefs.collectAsStateWithLifecycle(UserPrefs())
             CompositionLocalProvider(
                 LocalAppContainer provides container,
-                LocalFontScale provides fontSize.scale,
+                LocalFontScale provides prefs.fontSize.scale,
+                LocalAppTheme provides prefs.theme,
             ) {
                 OutfitTrackerTheme {
                     OutfitTrackerRoot()

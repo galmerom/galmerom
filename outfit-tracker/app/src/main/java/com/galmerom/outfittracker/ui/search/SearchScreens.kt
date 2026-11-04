@@ -19,7 +19,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Switch
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -35,7 +38,9 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -58,7 +63,7 @@ import com.galmerom.outfittracker.ui.textFor
 import com.galmerom.outfittracker.ui.viewModelFactory
 
 @Composable
-fun SearchScreen(onOpenMeeting: (String) -> Unit) {
+fun SearchScreen(onOpenMeeting: (String) -> Unit, onEditMeeting: (String) -> Unit) {
     val container = LocalAppContainer.current
     val meetings = container.meetingRepository ?: return
     val entities = container.entityRepository ?: return
@@ -90,6 +95,10 @@ fun SearchScreen(onOpenMeeting: (String) -> Unit) {
                         ClearTextButton(state.query.isNotEmpty()) { viewModel.onQuery("") }
                     },
                 )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(stringResource(R.string.show_hidden_meetings), modifier = Modifier.weight(1f))
+                    Switch(checked = state.includeHidden, onCheckedChange = viewModel::setIncludeHidden)
+                }
             }
             if (state.visible.isEmpty()) {
                 item {
@@ -113,7 +122,14 @@ fun SearchScreen(onOpenMeeting: (String) -> Unit) {
                 ) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(meeting.date.toHebrewDate(), style = MaterialTheme.typography.titleMedium)
-                        Text(meeting.entityName, color = MaterialTheme.colorScheme.primary)
+                        Text(meeting.displayNames(), color = MaterialTheme.colorScheme.primary)
+                        if (meeting.hidden) {
+                            Text(
+                                stringResource(R.string.meeting_hidden_badge),
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.labelLarge,
+                            )
+                        }
                         hit.forumName?.let { forum ->
                             Text(
                                 stringResource(R.string.forum_meeting_badge, forum),
@@ -146,7 +162,7 @@ fun SearchScreen(onOpenMeeting: (String) -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MeetingDetailScreen(meetingId: String, onBack: () -> Unit) {
+fun MeetingDetailScreen(meetingId: String, onBack: () -> Unit, onEdit: (String) -> Unit) {
     val container = LocalAppContainer.current
     val meetings = container.meetingRepository ?: return
     val clothing = container.clothingRepository ?: return
@@ -157,6 +173,7 @@ fun MeetingDetailScreen(meetingId: String, onBack: () -> Unit) {
         factory = viewModelFactory { MeetingDetailViewModel(meetingId, meetings, clothing) },
     )
     val state by viewModel.state.collectAsStateWithLifecycle()
+    var confirmDelete by remember { mutableStateOf(false) }
     val snackbar = remember { SnackbarHostState() }
     val context = LocalContext.current
     LaunchedEffect(viewModel) {
@@ -208,7 +225,21 @@ fun MeetingDetailScreen(meetingId: String, onBack: () -> Unit) {
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Text(meeting.entityName, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+            Text(meeting.displayNames(), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+            if (meeting.hidden) {
+                Text(stringResource(R.string.meeting_hidden_badge), color = MaterialTheme.colorScheme.error)
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = { onEdit(meeting.id) }) { Text(stringResource(R.string.meeting_edit)) }
+                TextButton(onClick = { viewModel.setHidden(!meeting.hidden) }) {
+                    Text(
+                        stringResource(
+                            if (meeting.hidden) R.string.meeting_unhide else R.string.meeting_hide,
+                        ),
+                    )
+                }
+                TextButton(onClick = { confirmDelete = true }) { Text(stringResource(R.string.meeting_delete)) }
+            }
             if (!meeting.photoUrl.isNullOrBlank()) {
                 ClothingImage(
                     jpeg = null,
@@ -268,6 +299,23 @@ fun MeetingDetailScreen(meetingId: String, onBack: () -> Unit) {
                     }
                 }
             }
+        }
+        if (confirmDelete) {
+            AlertDialog(
+                onDismissRequest = { confirmDelete = false },
+                title = { Text(stringResource(R.string.meeting_delete_title)) },
+                text = { Text(stringResource(R.string.meeting_delete_body)) },
+                confirmButton = {
+                    TextButton(onClick = { viewModel.delete(onBack) }) {
+                        Text(stringResource(R.string.meeting_delete))
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { confirmDelete = false }) {
+                        Text(stringResource(R.string.cancel))
+                    }
+                },
+            )
         }
     }
 }

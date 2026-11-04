@@ -12,21 +12,23 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
+import com.galmerom.outfittracker.data.AppTheme
+import com.galmerom.outfittracker.ui.LocalAppTheme
 import com.galmerom.outfittracker.ui.LocalFontScale
 import androidx.core.view.WindowCompat
 
-private val LightColors = lightColorScheme(
-    primary = Accent,
+private fun lightScheme(primary: Color, container: Color) = lightColorScheme(
+    primary = primary,
     onPrimary = Color.White,
-    primaryContainer = AccentSoft,
+    primaryContainer = container,
     onPrimaryContainer = Charcoal,
     secondary = WarmGray,
     onSecondary = Color.White,
     secondaryContainer = CreamDeep,
     onSecondaryContainer = Charcoal,
-    tertiary = Accent,
+    tertiary = primary,
     onTertiary = Color.White,
-    tertiaryContainer = AccentSoft,
+    tertiaryContainer = container,
     onTertiaryContainer = Charcoal,
     background = Cream,
     onBackground = Charcoal,
@@ -52,15 +54,53 @@ private val LightColors = lightColorScheme(
     scrim = Color(0xFF2A2420),
 )
 
+private val NightColors = androidx.compose.material3.darkColorScheme(
+    primary = NightAccent,
+    onPrimary = NightBackground,
+    primaryContainer = NightAccentSoft,
+    onPrimaryContainer = NightText,
+    secondary = NightMuted,
+    onSecondary = NightBackground,
+    secondaryContainer = NightSurface,
+    onSecondaryContainer = NightText,
+    tertiary = NightAccent,
+    onTertiary = NightBackground,
+    tertiaryContainer = NightAccentSoft,
+    onTertiaryContainer = NightText,
+    background = NightBackground,
+    onBackground = NightText,
+    surface = NightSurface,
+    onSurface = NightText,
+    surfaceVariant = Color(0xFF3A332F),
+    onSurfaceVariant = NightMuted,
+    surfaceTint = Color.Transparent,
+    outline = Color(0xFF6E625A),
+    outlineVariant = Color(0xFF4A433E),
+    error = Color(0xFFFFB4AB),
+    onError = Color(0xFF690005),
+    errorContainer = Color(0xFF93000A),
+    onErrorContainer = Color(0xFFFFDAD6),
+)
+
+private fun colorsFor(theme: AppTheme) = when (theme) {
+    AppTheme.WARM -> lightScheme(Accent, AccentSoft)
+    AppTheme.OCEAN -> lightScheme(Ocean, OceanSoft)
+    AppTheme.SAGE -> lightScheme(Sage, SageSoft)
+    AppTheme.LILAC -> lightScheme(Lilac, LilacSoft)
+    AppTheme.NIGHT -> NightColors
+}
+
 @Composable
 fun OutfitTrackerTheme(content: @Composable () -> Unit) {
+    val theme = LocalAppTheme.current
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {
             val activity = view.context as? Activity ?: return@SideEffect
             val controller = WindowCompat.getInsetsController(activity.window, view)
-            controller.isAppearanceLightStatusBars = true
-            controller.isAppearanceLightNavigationBars = true
+            val lightBars = !theme.dark
+            controller.isAppearanceLightStatusBars = lightBars
+            controller.isAppearanceLightNavigationBars = lightBars
         }
     }
     val density = LocalDensity.current
@@ -70,7 +110,7 @@ fun OutfitTrackerTheme(content: @Composable () -> Unit) {
         LocalDensity provides Density(density.density, density.fontScale * fontScale),
     ) {
         MaterialTheme(
-            colorScheme = LightColors,
+            colorScheme = colorsFor(theme),
             typography = AppTypography,
             shapes = AppShapes,
             content = content,

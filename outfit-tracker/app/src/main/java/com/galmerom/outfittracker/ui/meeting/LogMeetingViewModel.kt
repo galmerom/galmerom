@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.galmerom.outfittracker.domain.GarmentDetector
 import com.galmerom.outfittracker.domain.logic.EntitySuggestions
 import com.galmerom.outfittracker.domain.logic.WardrobeRules
+import com.galmerom.outfittracker.domain.logic.RepeatWarnings
 import com.galmerom.outfittracker.domain.logic.meetingCounts
 import com.galmerom.outfittracker.domain.model.ClothingCategory
 import com.galmerom.outfittracker.domain.model.ClothingItem
@@ -46,7 +47,9 @@ data class LogMeetingUiState(
     val date: LocalDate = LocalDate.now(),
     val entityQuery: String = "",
     val entities: List<Entity> = emptyList(),
-    val selectedEntity: Entity? = null,
+    val selectedEntities: List<Entity> = emptyList(),
+    val editingId: String? = null,
+    val existingPhotoUrl: String? = null,
     val newEntityType: EntityType = EntityType.PERSON,
     val wardrobe: List<ClothingItem> = emptyList(),
     val categories: List<ClothingCategory> = emptyList(),
@@ -70,6 +73,14 @@ data class LogMeetingUiState(
         }
     val offerCreate: Boolean get() = EntitySuggestions.shouldOfferCreate(entityQuery, entities)
     val selectable: List<ClothingItem> get() = WardrobeRules.selectable(wardrobe)
+    val warnings: Map<String, com.galmerom.outfittracker.domain.logic.RepeatWarning>
+        get() = RepeatWarnings.forSelection(
+            selectedEntityIds = selectedEntities.map { it.id }.toSet(),
+            selectedItemIds = selectedClothingIds,
+            entities = entities,
+            meetings = meetings,
+            excludeMeetingId = editingId,
+        )
 
     fun syncSelection(): LogMeetingUiState {
         val ids = rows.mapNotNull { it.itemId }.toSet() + aiSelectedIds
@@ -83,6 +94,7 @@ class LogMeetingViewModel(
     private val meetings: MeetingRepository,
     private val categoriesRepo: CategoryRepository,
     private val detector: GarmentDetector,
+    private val editingMeetingId: String?,
 ) : ViewModel() {
     private val _state = MutableStateFlow(LogMeetingUiState())
     val state: StateFlow<LogMeetingUiState> = _state
@@ -94,16 +106,19 @@ class LogMeetingViewModel(
         viewModelScope.launch {
             clothing.observeAll().catch { report(it.toUserMessage()) }.collect { items ->
                 _state.update { it.copy(wardrobe = items) }
+                maybeLoadExisting()
             }
         }
         viewModelScope.launch {
             entities.observeAll().catch { report(it.toUserMessage()) }.collect { list ->
                 _state.update { it.copy(entities = list) }
+                maybeLoadExisting()
             }
         }
         viewModelScope.launch {
             meetings.observeAll().catch { report(it.toUserMessage()) }.collect { list ->
                 _state.update { it.copy(meetings = list) }
+                maybeLoadExisting()
             }
         }
         viewModelScope.launch {
@@ -151,16 +166,20 @@ class LogMeetingViewModel(
 
     fun onDate(date: LocalDate) = _state.update { it.copy(date = date) }
 
-    fun onQuery(value: String) = _state.update { state ->
-        val stillSelected = state.selectedEntity?.takeIf { it.name == value }
-        state.copy(entityQuery = value, selectedEntity = stillSelected)
+    fun onQuery(value: String) = _state.update { it.copy(entityQuery = value) }
+
+    fun selectEntity(entity: Entity) = _state.update { state ->
+        val next = if (state.selectedEntities.any { it.id == entity.id }) {
+            state.selectedEntities
+        } else {
+            state.selectedEntities + entity
+        }
+        state.copy(selectedEntities = next, entityQuery = "")
     }
 
-    fun selectEntity(entity: Entity) = _state.update {
-        it.copy(selectedEntity = entity, entityQuery = entity.name)
+    fun removeEntity(id: String) = _state.update { state ->
+        state.copy(selectedEntities = state.selectedEntities.filterNot { it.id == id })
     }
-
-    fun clearEntity() = _state.update { it.copy(selectedEntity = null, entityQuery = "") }
 
     fun onEntityType(type: EntityType) = _state.update { it.copy(newEntityType = type) }
 
@@ -194,8 +213,8 @@ class LogMeetingViewModel(
                     _state.update {
                         it.copy(
                             creatingEntity = false,
-                            selectedEntity = entity,
-                            entityQuery = entity.name,
+                            selectedEntities = it.selectedEntities + entity,
+                            entityQuery = "",
                         )
                     }
                 },
@@ -302,10 +321,7 @@ class LogMeetingViewModel(
     fun save() {
         val current = _state.value
         if (current.saving) return
-        val entity = current.selectedEntity ?: current.entities.singleOrNull { candidate ->
-            candidate.name.equals(current.entityQuery.trim(), ignoreCase = true)
-        }
-        if (entity == null) {
+        if (current.selectedEntities.isEmpty()) {
             report(UserMessage.NEED_ENTITY)
             return
         }
@@ -313,25 +329,32 @@ class LogMeetingViewModel(
             report(UserMessage.NEED_CLOTHES)
             return
         }
+        val draft = MeetingDraft(
+            date = current.date,
+            entityIds = current.selectedEntities.map { it.id },
+            entityNames = current.selectedEntities.map { it.name },
+            clothingItemIds = current.selectedClothingIds.toList(),
+            note = current.note,
+        )
         viewModelScope.launch {
-            _state.update { it.copy(saving = true, selectedEntity = entity) }
-            meetings.log(
-                MeetingDraft(
-                    date = current.date,
-                    entityId = entity.id,
-                    entityName = entity.name,
-                    clothingItemIds = current.selectedClothingIds.toList(),
-                    note = current.note,
-                ),
-                current.meetingPhoto,
-            ).fold(
+            _state.update { it.copy(saving = true) }
+            val result = if (editingMeetingId == null) {
+                meetings.log(draft, current.meetingPhoto)
+            } else {
+                meetings.update(editingMeetingId, draft, current.meetingPhoto, current.existingPhotoUrl)
+            }
+            result.fold(
                 onSuccess = { outcome ->
-                    _state.value = LogMeetingUiState(
-                        entities = _state.value.entities,
-                        wardrobe = _state.value.wardrobe,
-                        categories = _state.value.categories,
-                        meetings = _state.value.meetings,
-                    )
+                    if (editingMeetingId == null) {
+                        _state.value = LogMeetingUiState(
+                            entities = _state.value.entities,
+                            wardrobe = _state.value.wardrobe,
+                            categories = _state.value.categories,
+                            meetings = _state.value.meetings,
+                        )
+                    } else {
+                        _state.update { it.copy(saving = false) }
+                    }
                     report(
                         if (outcome == SaveOutcome.SAVED_WITHOUT_PHOTO) {
                             UserMessage.SAVED_WITHOUT_PHOTO
@@ -345,6 +368,44 @@ class LogMeetingViewModel(
                     report(error.toUserMessage())
                 },
             )
+        }
+    }
+
+    private var hydrated = false
+
+    private fun maybeLoadExisting() {
+        val id = editingMeetingId ?: return
+        if (hydrated) return
+        val current = _state.value
+        val meeting = current.meetings.find { it.id == id } ?: return
+        if (meeting.entityIds.isNotEmpty() && current.entities.isEmpty()) return
+        if (meeting.clothingItemIds.isNotEmpty() && current.wardrobe.isEmpty()) return
+        hydrated = true
+        val selected = meeting.entityIds.mapIndexed { index, entityId ->
+            current.entities.find { it.id == entityId } ?: Entity(
+                id = entityId,
+                name = meeting.entityNames.getOrNull(index).orEmpty().ifBlank { entityId },
+                type = EntityType.PERSON,
+            )
+        }
+        val rows = meeting.clothingItemIds.map { itemId ->
+            val item = current.wardrobe.find { it.id == itemId }
+            ClothingPickRow(
+                key = itemId,
+                categoryId = item?.categoryId.orEmpty(),
+                query = item?.description.orEmpty(),
+                itemId = itemId,
+            )
+        }
+        _state.update {
+            it.copy(
+                date = meeting.date,
+                selectedEntities = selected,
+                rows = rows,
+                note = meeting.note,
+                existingPhotoUrl = meeting.photoUrl,
+                editingId = meeting.id,
+            ).syncSelection()
         }
     }
 
