@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.OutfitTracker" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">#F6F1EB</item>
+        <item name="android:statusBarColor">#F6F1EB</item>
+        <item name="android:navigationBarColor">#FFFCF9</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:forceDarkAllowed">false</item>
+    </style>
+</resources>

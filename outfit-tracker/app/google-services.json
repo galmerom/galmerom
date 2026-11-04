@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "703709918265",
+    "project_id": "outfit-tracker-d503e",
+    "storage_bucket": "outfit-tracker-d503e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:703709918265:android:1d46b00334d0ff8a7109e8",
+        "android_client_info": {
+          "package_name": "com.galmerom.outfittracker"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "703709918265-6t6frbblrao1l7mm7v7jga93hrlgc6pe.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.galmerom.outfittracker",
+            "certificate_hash": "86e83f3571719932789534a06f99d945b3444e3d"
+          }
+        },
+        {
+          "client_id": "703709918265-76jm4ujacut5k48l84h2fi5vu2dos4qt.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB9R21z3LTd_wgwj_IUfjQ1F4eB5OKq21g"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "703709918265-76jm4ujacut5k48l84h2fi5vu2dos4qt.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
