@@ -24,6 +24,7 @@ import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -32,6 +33,8 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.ui.res.painterResource
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -49,6 +52,11 @@ import com.galmerom.outfittracker.domain.model.ClothingItem
 import com.galmerom.outfittracker.ui.LocalAppContainer
 import com.galmerom.outfittracker.ui.common.CategoryDropdown
 import com.galmerom.outfittracker.ui.common.ClothingImage
+import com.galmerom.outfittracker.ui.common.EmptyState
+import com.galmerom.outfittracker.ui.common.SectionTitle
+import com.galmerom.outfittracker.ui.common.appCardColors
+import com.galmerom.outfittracker.ui.common.appCardElevation
+import com.galmerom.outfittracker.ui.common.appTextFieldColors
 import com.galmerom.outfittracker.ui.common.labelRes
 import com.galmerom.outfittracker.ui.common.rememberPhotoActions
 import com.galmerom.outfittracker.ui.textFor
@@ -65,9 +73,14 @@ fun WardrobeScreen(onAdd: () -> Unit, onEdit: (String) -> Unit, onHidden: () -> 
         viewModel.messages.collect { snackbar.showSnackbar(context.textFor(it)) }
     }
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbar) },
         floatingActionButton = {
-            ExtendedFloatingActionButton(onClick = onAdd) {
+            ExtendedFloatingActionButton(
+                onClick = onAdd,
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+            ) {
                 Icon(Icons.Filled.Add, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
                 Text(stringResource(R.string.wardrobe_add))
@@ -76,8 +89,8 @@ fun WardrobeScreen(onAdd: () -> Unit, onEdit: (String) -> Unit, onHidden: () -> 
     ) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            contentPadding = PaddingValues(20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             item {
                 TextButton(onClick = onHidden) {
@@ -85,13 +98,21 @@ fun WardrobeScreen(onAdd: () -> Unit, onEdit: (String) -> Unit, onHidden: () -> 
                 }
             }
             if (items.isEmpty()) {
-                item { Text(stringResource(R.string.wardrobe_empty)) }
+                item {
+                    EmptyState(message = stringResource(R.string.wardrobe_empty)) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_hanger),
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
             }
             ClothingCategory.entries.forEach { category ->
                 val group = items.filter { it.category == category }
                 if (group.isEmpty()) return@forEach
                 item(key = "header-$category") {
-                    Text(stringResource(category.labelRes()), style = MaterialTheme.typography.titleMedium)
+                    SectionTitle(stringResource(category.labelRes()))
                 }
                 items(group, key = { it.id }) { clothingItem ->
                     ClothingRow(clothingItem, onClick = { onEdit(clothingItem.id) })
@@ -109,14 +130,27 @@ fun HiddenItemsScreen(onBack: () -> Unit) {
     SecondaryPage(title = stringResource(R.string.wardrobe_hidden), onBack = onBack) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            contentPadding = PaddingValues(20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             if (items.isEmpty()) {
-                item { Text(stringResource(R.string.wardrobe_hidden_empty)) }
+                item {
+                    EmptyState(message = stringResource(R.string.wardrobe_hidden_empty)) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_hanger),
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
             }
             items(items, key = { it.id }) { item ->
-                Card(modifier = Modifier.fillMaxWidth()) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.medium,
+                    colors = appCardColors(),
+                    elevation = appCardElevation(),
+                ) {
                     Row(
                         modifier = Modifier.padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -186,16 +220,18 @@ fun ClothingEditScreen(itemId: String, onBack: () -> Unit) {
                 jpeg = state.photoJpeg,
                 url = state.photoUrl,
                 description = stringResource(R.string.photo_description),
-                modifier = Modifier.fillMaxWidth().height(180.dp),
+                modifier = Modifier.fillMaxWidth().height(200.dp),
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = photos.onCamera) { Text(stringResource(R.string.clothing_camera)) }
-                Button(onClick = photos.onGallery) { Text(stringResource(R.string.clothing_gallery)) }
+                OutlinedButton(onClick = photos.onCamera) { Text(stringResource(R.string.clothing_camera)) }
+                OutlinedButton(onClick = photos.onGallery) { Text(stringResource(R.string.clothing_gallery)) }
             }
             OutlinedTextField(
                 value = state.description,
                 onValueChange = viewModel::onDescription,
                 label = { Text(stringResource(R.string.clothing_description)) },
+                colors = appTextFieldColors(),
+                shape = MaterialTheme.shapes.extraSmall,
                 modifier = Modifier.fillMaxWidth(),
             )
             CategoryDropdown(
@@ -209,6 +245,7 @@ fun ClothingEditScreen(itemId: String, onBack: () -> Unit) {
                     Text(
                         stringResource(R.string.clothing_hidden_help),
                         style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 Switch(checked = state.hidden, onCheckedChange = viewModel::onHidden)
@@ -230,16 +267,22 @@ fun ClothingEditScreen(itemId: String, onBack: () -> Unit) {
 
 @Composable
 private fun ClothingRow(item: ClothingItem, onClick: () -> Unit) {
-    Card(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        colors = appCardColors(),
+        elevation = appCardElevation(),
+    ) {
         Row(
-            modifier = Modifier.padding(12.dp),
+            modifier = Modifier.padding(14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             ClothingImage(
                 jpeg = null,
                 url = item.photoUrl,
                 description = item.description,
-                modifier = Modifier.size(56.dp),
+                modifier = Modifier.size(64.dp),
             )
             Spacer(Modifier.width(12.dp))
             Text(item.description, style = MaterialTheme.typography.titleMedium)
@@ -256,9 +299,14 @@ private fun SecondaryPage(
     content: @Composable (PaddingValues) -> Unit,
 ) {
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    titleContentColor = MaterialTheme.colorScheme.onBackground,
+                ),
                 title = { Text(title) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {

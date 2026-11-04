@@ -1,31 +1,70 @@
 package com.galmerom.outfittracker.ui.theme
 
+import android.app.Activity
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.core.view.WindowCompat
 
 private val LightColors = lightColorScheme(
-    primary = Color(0xFF6D4C41),
+    primary = Accent,
     onPrimary = Color.White,
-    primaryContainer = Color(0xFFEEDFD6),
-    onPrimaryContainer = Color(0xFF2C1810),
-    secondary = Color(0xFF8D6E63),
+    primaryContainer = AccentSoft,
+    onPrimaryContainer = Charcoal,
+    secondary = WarmGray,
     onSecondary = Color.White,
-    background = Color(0xFFFFF8F5),
-    onBackground = Color(0xFF2C1810),
-    surface = Color(0xFFFFF8F5),
-    onSurface = Color(0xFF2C1810),
+    secondaryContainer = CreamDeep,
+    onSecondaryContainer = Charcoal,
+    tertiary = Accent,
+    onTertiary = Color.White,
+    tertiaryContainer = AccentSoft,
+    onTertiaryContainer = Charcoal,
+    background = Cream,
+    onBackground = Charcoal,
+    surface = CardWhite,
+    onSurface = Charcoal,
+    surfaceVariant = CreamDeep,
+    onSurfaceVariant = WarmGray,
+    surfaceTint = Color.Transparent,
+    surfaceContainerLowest = CardWhite,
+    surfaceContainerLow = Cream,
+    surfaceContainer = Cream,
+    surfaceContainerHigh = CreamDeep,
+    surfaceContainerHighest = CreamDeep,
+    outline = OutlineWarm,
+    outlineVariant = OutlineSoft,
+    error = ErrorWarm,
+    onError = Color.White,
+    errorContainer = ErrorSoft,
+    onErrorContainer = Color(0xFF5C241E),
+    inverseSurface = Charcoal,
+    inverseOnSurface = Cream,
+    inversePrimary = Color(0xFFE7C7C0),
+    scrim = Color(0xFF2A2420),
 )
 
 @Composable
 fun OutfitTrackerTheme(content: @Composable () -> Unit) {
+    val view = LocalView.current
+    if (!view.isInEditMode) {
+        SideEffect {
+            val activity = view.context as? Activity ?: return@SideEffect
+            val controller = WindowCompat.getInsetsController(activity.window, view)
+            controller.isAppearanceLightStatusBars = true
+            controller.isAppearanceLightNavigationBars = true
+        }
+    }
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
         MaterialTheme(
             colorScheme = LightColors,
+            typography = AppTypography,
+            shapes = AppShapes,
             content = content,
         )
     }

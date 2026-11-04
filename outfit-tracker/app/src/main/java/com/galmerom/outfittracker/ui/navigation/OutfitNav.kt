@@ -4,20 +4,24 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.outlined.DateRange
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
@@ -93,7 +97,7 @@ private fun AuthGate(container: AppContainer) {
     }
     when (gate) {
         Gate.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator()
+            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
         }
         Gate.SignedOut -> SignedOutScreen(container)
         is Gate.SignedIn -> AppScaffold()
@@ -106,7 +110,10 @@ private fun SignedOutScreen(container: AppContainer) {
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val auth = container.authRepository ?: return
-    Scaffold(snackbarHost = { SnackbarHost(snackbar) }) { padding ->
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        snackbarHost = { SnackbarHost(snackbar) },
+    ) { padding ->
         Box(Modifier.padding(padding)) {
             SignInScreen(
                 missingWebClient = container.status == FirebaseStatus.MissingWebClient,
@@ -128,11 +135,23 @@ private fun AppScaffold() {
     val route = backStack?.destination?.route
     val topLevel = route == Routes.LOG || route == Routes.SEARCH || route == Routes.WARDROBE
     val scope = rememberCoroutineScope()
+    val barColors = NavigationBarItemDefaults.colors(
+        selectedIconColor = MaterialTheme.colorScheme.primary,
+        selectedTextColor = MaterialTheme.colorScheme.primary,
+        indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             if (topLevel) {
                 TopAppBar(
-                    title = { Text(stringResource(R.string.app_name)) },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.background,
+                        titleContentColor = MaterialTheme.colorScheme.onBackground,
+                    ),
+                    title = { Text(stringResource(R.string.app_name), style = MaterialTheme.typography.titleLarge) },
                     actions = {
                         TextButton(
                             onClick = {
@@ -147,23 +166,34 @@ private fun AppScaffold() {
         },
         bottomBar = {
             if (topLevel) {
-                NavigationBar {
+                NavigationBar(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    tonalElevation = 3.dp,
+                ) {
                     NavigationBarItem(
                         selected = route == Routes.LOG,
                         onClick = { navController.openTopLevel(Routes.LOG) },
-                        icon = { Icon(Icons.Filled.DateRange, contentDescription = null) },
+                        colors = barColors,
+                        icon = { Icon(Icons.Outlined.DateRange, contentDescription = null) },
                         label = { Text(stringResource(R.string.nav_log_meeting)) },
                     )
                     NavigationBarItem(
                         selected = route == Routes.SEARCH,
                         onClick = { navController.openTopLevel(Routes.SEARCH) },
-                        icon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                        colors = barColors,
+                        icon = { Icon(Icons.Outlined.Search, contentDescription = null) },
                         label = { Text(stringResource(R.string.nav_search)) },
                     )
                     NavigationBarItem(
                         selected = route == Routes.WARDROBE,
                         onClick = { navController.openTopLevel(Routes.WARDROBE) },
-                        icon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null) },
+                        colors = barColors,
+                        icon = {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_hanger),
+                                contentDescription = null,
+                            )
+                        },
                         label = { Text(stringResource(R.string.nav_wardrobe)) },
                     )
                 }

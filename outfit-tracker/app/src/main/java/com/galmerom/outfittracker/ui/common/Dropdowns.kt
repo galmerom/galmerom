@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import com.galmerom.outfittracker.R
 import com.galmerom.outfittracker.domain.model.ClothingCategory
 import com.galmerom.outfittracker.domain.model.ClothingItem
+import androidx.compose.material3.MaterialTheme
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -42,6 +43,8 @@ fun CategoryDropdown(
             onValueChange = {},
             readOnly = true,
             label = { Text(stringResource(R.string.clothing_category)) },
+            colors = appTextFieldColors(),
+            shape = MaterialTheme.shapes.extraSmall,
             modifier = Modifier
                 .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
                 .fillMaxWidth(),
@@ -79,6 +82,8 @@ fun ClothingCategoryMenu(
             onValueChange = {},
             readOnly = true,
             label = { Text(stringResource(R.string.clothes_section)) },
+            colors = appTextFieldColors(),
+            shape = MaterialTheme.shapes.extraSmall,
             modifier = Modifier
                 .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
                 .fillMaxWidth(),

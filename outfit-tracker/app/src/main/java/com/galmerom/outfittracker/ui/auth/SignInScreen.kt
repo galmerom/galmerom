@@ -6,9 +6,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import com.galmerom.outfittracker.ui.common.appCardColors
+import com.galmerom.outfittracker.ui.common.appCardElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -33,25 +36,44 @@ fun SignInScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Text(text = stringResource(R.string.hello), style = MaterialTheme.typography.headlineMedium)
-        Text(text = stringResource(R.string.app_name), style = MaterialTheme.typography.titleLarge)
-        Text(text = stringResource(R.string.sign_in_body), style = MaterialTheme.typography.bodyLarge)
-        if (missingWebClient) {
-            Text(
-                text = stringResource(R.string.sign_in_missing_client),
-                color = MaterialTheme.colorScheme.error,
-            )
-        }
-        Button(
-            onClick = {
-                busy = true
-            },
-            enabled = !missingWebClient && !busy,
-            modifier = Modifier.fillMaxWidth(),
+        Card(
+            shape = MaterialTheme.shapes.large,
+            colors = appCardColors(),
+            elevation = appCardElevation(),
         ) {
-            if (busy) {
-                CircularProgressIndicator()
-            } else {
-                Text(stringResource(R.string.sign_in_google))
+            Column(
+                modifier = Modifier.padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(text = stringResource(R.string.app_name), style = MaterialTheme.typography.titleLarge)
+                Text(
+                    text = stringResource(R.string.sign_in_body),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (missingWebClient) {
+                    Text(
+                        text = stringResource(R.string.sign_in_missing_client),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+                Button(
+                    onClick = {
+                        busy = true
+                    },
+                    enabled = !missingWebClient && !busy,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.medium,
+                ) {
+                    if (busy) {
+                        CircularProgressIndicator(
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier.padding(2.dp),
+                        )
+                    } else {
+                        Text(stringResource(R.string.sign_in_google))
+                    }
+                }
             }
         }
     }

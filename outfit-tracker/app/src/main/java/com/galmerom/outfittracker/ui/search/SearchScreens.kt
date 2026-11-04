@@ -17,6 +17,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -29,6 +31,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -43,6 +46,11 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.galmerom.outfittracker.R
 import com.galmerom.outfittracker.ui.LocalAppContainer
 import com.galmerom.outfittracker.ui.common.ClothingImage
+import com.galmerom.outfittracker.ui.common.EmptyState
+import com.galmerom.outfittracker.ui.common.SectionTitle
+import com.galmerom.outfittracker.ui.common.appCardColors
+import com.galmerom.outfittracker.ui.common.appCardElevation
+import com.galmerom.outfittracker.ui.common.appTextFieldColors
 import com.galmerom.outfittracker.ui.common.labelRes
 import com.galmerom.outfittracker.ui.common.toHebrewDate
 import com.galmerom.outfittracker.ui.textFor
@@ -62,27 +70,48 @@ fun SearchScreen(onOpenMeeting: (String) -> Unit) {
     Column(Modifier.fillMaxSize()) {
         LazyColumn(
             modifier = Modifier.weight(1f),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            contentPadding = PaddingValues(20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             item {
                 OutlinedTextField(
                     value = state.query,
                     onValueChange = viewModel::onQuery,
                     label = { Text(stringResource(R.string.search_hint, entityLabel)) },
+                    colors = appTextFieldColors(),
+                    shape = MaterialTheme.shapes.extraSmall,
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
             if (state.visible.isEmpty()) {
-                item { Text(stringResource(R.string.search_empty)) }
+                item {
+                    EmptyState(message = stringResource(R.string.search_empty)) {
+                        Icon(
+                            Icons.Outlined.Search,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
             }
             items(state.visible, key = { it.id }) { meeting ->
-                Card(onClick = { onOpenMeeting(meeting.id) }, modifier = Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Card(
+                    onClick = { onOpenMeeting(meeting.id) },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.medium,
+                    colors = appCardColors(),
+                    elevation = appCardElevation(),
+                ) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(meeting.date.toHebrewDate(), style = MaterialTheme.typography.titleMedium)
-                        Text(meeting.entityName)
+                        Text(meeting.entityName, color = MaterialTheme.colorScheme.primary)
                         if (meeting.note.isNotBlank()) {
-                            Text(meeting.note, maxLines = 2, style = MaterialTheme.typography.bodySmall)
+                            Text(
+                                meeting.note,
+                                maxLines = 2,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                         }
                     }
                 }
@@ -116,9 +145,14 @@ fun MeetingDetailScreen(meetingId: String, onBack: () -> Unit) {
         viewModel.messages.collect { snackbar.showSnackbar(context.textFor(it)) }
     }
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    titleContentColor = MaterialTheme.colorScheme.onBackground,
+                ),
                 title = { Text(stringResource(R.string.meeting_detail_title)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
@@ -130,11 +164,16 @@ fun MeetingDetailScreen(meetingId: String, onBack: () -> Unit) {
     ) { padding ->
         val meeting = state.meeting
         if (!state.meetingsLoaded) {
-            Text(stringResource(R.string.loading), modifier = Modifier.padding(padding).padding(16.dp))
+            Text(stringResource(R.string.loading), modifier = Modifier.padding(padding).padding(20.dp))
             return@Scaffold
         }
         if (meeting == null) {
-            Text(stringResource(R.string.meeting_missing), modifier = Modifier.padding(padding).padding(16.dp))
+            EmptyState(
+                message = stringResource(R.string.meeting_missing),
+                modifier = Modifier.padding(padding),
+            ) {
+                Icon(Icons.Outlined.Info, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            }
             return@Scaffold
         }
         Column(
@@ -142,12 +181,16 @@ fun MeetingDetailScreen(meetingId: String, onBack: () -> Unit) {
                 .fillMaxSize()
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
-                .padding(16.dp),
+                .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(meeting.date.toHebrewDate(), style = MaterialTheme.typography.titleLarge)
-            Text(stringResource(R.string.entity_label), style = MaterialTheme.typography.labelLarge)
-            Text(meeting.entityName, style = MaterialTheme.typography.titleMedium)
+            Text(
+                stringResource(R.string.entity_label),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(meeting.entityName, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
             if (!meeting.photoUrl.isNullOrBlank()) {
                 ClothingImage(
                     jpeg = null,
@@ -157,28 +200,51 @@ fun MeetingDetailScreen(meetingId: String, onBack: () -> Unit) {
                 )
             }
             if (meeting.note.isNotBlank()) {
-                Text(stringResource(R.string.meeting_note), style = MaterialTheme.typography.labelLarge)
+                Text(
+                    stringResource(R.string.meeting_note),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 Text(meeting.note)
             }
-            Text(stringResource(R.string.meeting_clothes), style = MaterialTheme.typography.titleMedium)
+            SectionTitle(stringResource(R.string.meeting_clothes))
             meeting.clothingItemIds.forEach { id ->
                 val item = state.clothes[id]
                 if (item == null) {
-                    Text(stringResource(R.string.clothing_missing))
+                    Text(
+                        stringResource(R.string.clothing_missing),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 } else {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        ClothingImage(
-                            jpeg = null,
-                            url = item.photoUrl,
-                            description = item.description,
-                            modifier = Modifier.size(64.dp),
-                        )
-                        Spacer(Modifier.width(12.dp))
-                        Column {
-                            Text(item.description, style = MaterialTheme.typography.titleMedium)
-                            Text(stringResource(item.category.labelRes()))
-                            if (item.hidden) {
-                                Text(stringResource(R.string.clothing_hidden_badge))
+                    Card(
+                        shape = MaterialTheme.shapes.medium,
+                        colors = appCardColors(),
+                        elevation = appCardElevation(),
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            ClothingImage(
+                                jpeg = null,
+                                url = item.photoUrl,
+                                description = item.description,
+                                modifier = Modifier.size(64.dp),
+                            )
+                            Spacer(Modifier.width(12.dp))
+                            Column {
+                                Text(item.description, style = MaterialTheme.typography.titleMedium)
+                                Text(
+                                    stringResource(item.category.labelRes()),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                if (item.hidden) {
+                                    Text(
+                                        stringResource(R.string.clothing_hidden_badge),
+                                        color = MaterialTheme.colorScheme.primary,
+                                        style = MaterialTheme.typography.labelLarge,
+                                    )
+                                }
                             }
                         }
                     }
