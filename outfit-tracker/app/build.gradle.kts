@@ -80,6 +80,7 @@ dependencies {
     implementation(libs.firebase.firestore)
     implementation(libs.firebase.storage)
     implementation(libs.firebase.ai)
+    debugImplementation(libs.firebase.appcheck.debug)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
     testImplementation(libs.junit)

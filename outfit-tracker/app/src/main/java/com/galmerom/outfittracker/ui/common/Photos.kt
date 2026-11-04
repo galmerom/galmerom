@@ -11,6 +11,10 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -29,6 +33,7 @@ import androidx.core.content.FileProvider
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import com.galmerom.outfittracker.data.photo.readCompressedJpeg
+import com.galmerom.outfittracker.domain.logic.ImageSizing
 import java.io.File
 import java.util.UUID
 import kotlinx.coroutines.launch
@@ -43,6 +48,7 @@ fun rememberPhotoActions(
     onJpeg: (ByteArray) -> Unit,
     onFailure: () -> Unit,
     onDenied: () -> Unit = onFailure,
+    maxEdge: Int = ImageSizing.MAX_EDGE_PX,
 ): PhotoActions {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -51,7 +57,7 @@ fun rememberPhotoActions(
         val uri = cameraUri.value
         if (!success || uri == null) return@rememberLauncherForActivityResult
         scope.launch {
-            runCatching { context.readCompressedJpeg(uri) }
+            runCatching { context.readCompressedJpeg(uri, maxEdge) }
                 .onSuccess(onJpeg)
                 .onFailure { onFailure() }
         }
@@ -66,7 +72,7 @@ fun rememberPhotoActions(
     val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
         scope.launch {
-            runCatching { context.readCompressedJpeg(uri) }
+            runCatching { context.readCompressedJpeg(uri, maxEdge) }
                 .onSuccess(onJpeg)
                 .onFailure { onFailure() }
         }
@@ -120,6 +126,22 @@ fun ClothingImage(
             )
         }
     }
+}
+
+@Composable
+fun EntityAvatar(
+    photoUrl: String?,
+    label: String,
+    modifier: Modifier = Modifier,
+    size: Dp = 40.dp,
+    jpeg: ByteArray? = null,
+) {
+    ClothingImage(
+        jpeg = jpeg,
+        url = photoUrl,
+        description = label,
+        modifier = modifier.size(size).clip(CircleShape),
+    )
 }
 
 private fun launchCamera(

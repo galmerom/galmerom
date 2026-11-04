@@ -2,7 +2,10 @@ package com.galmerom.outfittracker.data.firestore
 
 import com.galmerom.outfittracker.data.awaitCommitted
 import com.galmerom.outfittracker.data.photo.FirebasePhotoStorage
+import com.galmerom.outfittracker.data.photo.ImageCompressor
+import com.galmerom.outfittracker.domain.logic.CategoryOrder
 import com.galmerom.outfittracker.domain.logic.Dates
+import com.galmerom.outfittracker.domain.logic.ImageSizing
 import com.galmerom.outfittracker.domain.logic.errorKind
 import com.galmerom.outfittracker.domain.model.ClothingCategory
 import com.galmerom.outfittracker.domain.model.DefaultCategories
@@ -122,37 +125,74 @@ class FirestoreClothingRepository(
 class FirestoreEntityRepository(
     private val firestore: FirebaseFirestore,
     private val auth: FirebaseAuth,
+    private val photos: FirebasePhotoStorage,
 ) : EntityRepository {
     override fun observeAll(): Flow<List<Entity>> =
         observeUserCollection(firestore, auth, ENTITIES, DocumentSnapshot::toEntity)
 
-    override suspend fun create(name: String, type: EntityType): Result<Entity> {
+    override suspend fun create(
+        name: String,
+        type: EntityType,
+        description: String,
+        photoJpeg: ByteArray?,
+    ): Result<Entity> {
         val uid = auth.currentUser?.uid ?: return Result.failure(IllegalStateException("signed out"))
         val trimmed = name.trim()
         if (trimmed.isEmpty()) return Result.failure(IllegalArgumentException("empty name"))
         val id = firestore.collection("users").document().id
-        val entity = Entity(id = id, name = trimmed, type = type)
+        val photoUrl = uploadAvatar(uid, id, photoJpeg).getOrElse { return Result.failure(it) }
+        val entity = Entity(
+            id = id,
+            name = trimmed,
+            type = type,
+            description = description.trim(),
+            photoUrl = photoUrl,
+        )
+        val fields = mutableMapOf<String, Any>(
+            "name" to entity.name,
+            "type" to entity.type.wire,
+            "hidden" to false,
+            "memberIds" to emptyList<String>(),
+            "description" to entity.description,
+        )
+        entity.photoUrl?.let { fields["photoUrl"] = it }
         return firestore.userCollection(uid, ENTITIES)
             .document(id)
-            .set(
-                mapOf(
-                    "name" to entity.name,
-                    "type" to entity.type.wire,
-                    "hidden" to false,
-                    "memberIds" to emptyList<String>(),
-                ),
-            )
+            .set(fields)
             .awaitCommitted()
             .map { entity }
     }
 
-    override suspend fun update(id: String, name: String, type: EntityType): Result<Unit> {
+    override suspend fun update(
+        id: String,
+        name: String,
+        type: EntityType,
+        description: String,
+        photoJpeg: ByteArray?,
+        keepPhotoUrl: String?,
+    ): Result<Unit> {
         val uid = auth.currentUser?.uid ?: return Result.failure(IllegalStateException("signed out"))
         val trimmed = name.trim()
         if (trimmed.isEmpty()) return Result.failure(IllegalArgumentException("empty name"))
-        val updates = mutableMapOf<String, Any>("name" to trimmed, "type" to type.wire)
+        val photoUrl = if (photoJpeg != null) {
+            uploadAvatar(uid, id, photoJpeg).getOrElse { return Result.failure(it) }
+        } else {
+            keepPhotoUrl
+        }
+        val updates = mutableMapOf<String, Any>(
+            "name" to trimmed,
+            "type" to type.wire,
+            "description" to description.trim(),
+        )
+        if (photoUrl != null) updates["photoUrl"] = photoUrl
         if (type != EntityType.FORUM) updates["memberIds"] = emptyList<String>()
         return firestore.userCollection(uid, ENTITIES).document(id).update(updates).awaitCommitted()
+    }
+
+    private suspend fun uploadAvatar(uid: String, id: String, photoJpeg: ByteArray?): Result<String?> {
+        if (photoJpeg == null) return Result.success(null)
+        val jpeg = ImageCompressor.jpeg(photoJpeg, ImageSizing.AVATAR_EDGE_PX)
+        return runCatching { photos.upload("users/$uid/avatars/$id.jpg", jpeg) }
     }
 
     override suspend fun setHidden(id: String, hidden: Boolean): Result<Unit> {
@@ -272,8 +312,20 @@ class FirestoreCategoryRepository(
                 close(error)
                 return@addSnapshotListener
             }
-            val categories = snapshot?.documents?.mapNotNull { it.toCategory() }.orEmpty()
-                .sortedBy { it.sortOrder }
+            val stored = snapshot?.documents?.mapNotNull { it.toCategory() }.orEmpty()
+            val migration = CategoryOrder.migrationUpdates(stored)
+            val categories = if (migration == null) {
+                stored
+            } else {
+                val batch = firestore.batch()
+                migration.forEach { (id, order) ->
+                    batch.update(collection.document(id), "sortOrder", order)
+                }
+                batch.commit()
+                stored.map { category ->
+                    migration[category.id]?.let { category.copy(sortOrder = it) } ?: category
+                }
+            }.sortedWith(compareBy({ it.sortOrder }, { it.name }))
             trySend(categories)
         }
         awaitClose { registration.remove() }
@@ -300,6 +352,17 @@ class FirestoreCategoryRepository(
         val trimmed = name.trim()
         if (trimmed.isEmpty()) return Result.failure(IllegalArgumentException("empty name"))
         return firestore.userCollection(uid, CATEGORIES).document(id).update("name", trimmed).awaitCommitted()
+    }
+
+    override suspend fun reorder(ids: List<String>): Result<Unit> {
+        val uid = auth.currentUser?.uid ?: return Result.failure(IllegalStateException("signed out"))
+        if (ids.isEmpty()) return Result.success(Unit)
+        val collection = firestore.userCollection(uid, CATEGORIES)
+        val batch = firestore.batch()
+        CategoryOrder.sortOrders(ids).forEach { (id, order) ->
+            batch.update(collection.document(id), "sortOrder", order)
+        }
+        return batch.commit().awaitCommitted()
     }
 
     private companion object {
@@ -348,6 +411,8 @@ private fun DocumentSnapshot.toEntity(): Entity? {
         type = type,
         hidden = getBoolean("hidden") ?: false,
         memberIds = members,
+        description = getString("description").orEmpty(),
+        photoUrl = getString("photoUrl")?.takeIf { it.isNotBlank() },
     )
 }
 

@@ -16,6 +16,8 @@ enum class UserMessage {
     AI_FAILED,
     AI_EMPTY,
     CLOTHING_SAVED,
+    SAVED,
+    NEED_NAME,
     MEETING_SAVED,
     SAVED_WITHOUT_PHOTO,
 }
@@ -36,6 +38,8 @@ fun Context.textFor(message: UserMessage): String = when (message) {
     UserMessage.AI_FAILED -> getString(R.string.ai_failed)
     UserMessage.AI_EMPTY -> getString(R.string.ai_empty)
     UserMessage.CLOTHING_SAVED -> getString(R.string.clothing_saved)
+    UserMessage.SAVED -> getString(R.string.saved)
+    UserMessage.NEED_NAME -> getString(R.string.entity_name_required)
     UserMessage.MEETING_SAVED -> getString(R.string.meeting_saved)
     UserMessage.SAVED_WITHOUT_PHOTO -> getString(R.string.saved_without_photo)
 }

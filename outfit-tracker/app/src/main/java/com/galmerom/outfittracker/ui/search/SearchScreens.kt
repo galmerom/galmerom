@@ -1,5 +1,7 @@
 package com.galmerom.outfittracker.ui.search
 
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -52,6 +54,7 @@ import com.galmerom.outfittracker.R
 import com.galmerom.outfittracker.ui.LocalAppContainer
 import com.galmerom.outfittracker.ui.common.ClearTextButton
 import com.galmerom.outfittracker.ui.common.ClothingImage
+import com.galmerom.outfittracker.ui.common.EntityAvatar
 import com.galmerom.outfittracker.ui.common.EmptyState
 import com.galmerom.outfittracker.ui.common.SectionTitle
 import com.galmerom.outfittracker.ui.common.appCardColors
@@ -62,6 +65,7 @@ import com.galmerom.outfittracker.ui.common.toHebrewDate
 import com.galmerom.outfittracker.ui.textFor
 import com.galmerom.outfittracker.ui.viewModelFactory
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SearchScreen(onOpenMeeting: (String) -> Unit, onEditMeeting: (String) -> Unit) {
     val container = LocalAppContainer.current
@@ -122,6 +126,15 @@ fun SearchScreen(onOpenMeeting: (String) -> Unit, onEditMeeting: (String) -> Uni
                 ) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(meeting.date.toHebrewDate(), style = MaterialTheme.typography.titleMedium)
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            meeting.entityIds.forEach { id ->
+                                val entity = state.entities.find { it.id == id }
+                                EntityAvatar(entity?.photoUrl, entity?.name ?: id, size = 28.dp)
+                            }
+                        }
                         Text(meeting.displayNames(), color = MaterialTheme.colorScheme.primary)
                         if (meeting.hidden) {
                             Text(
@@ -219,6 +232,14 @@ fun MeetingDetailScreen(meetingId: String, onBack: () -> Unit, onEdit: (String) 
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            if (!meeting.photoUrl.isNullOrBlank()) {
+                ClothingImage(
+                    jpeg = null,
+                    url = meeting.photoUrl,
+                    description = stringResource(R.string.meeting_photo_description),
+                    modifier = Modifier.fillMaxWidth().height(280.dp),
+                )
+            }
             Text(meeting.date.toHebrewDate(), style = MaterialTheme.typography.titleLarge)
             Text(
                 stringResource(R.string.entity_label),
@@ -239,14 +260,6 @@ fun MeetingDetailScreen(meetingId: String, onBack: () -> Unit, onEdit: (String) 
                     )
                 }
                 TextButton(onClick = { confirmDelete = true }) { Text(stringResource(R.string.meeting_delete)) }
-            }
-            if (!meeting.photoUrl.isNullOrBlank()) {
-                ClothingImage(
-                    jpeg = null,
-                    url = meeting.photoUrl,
-                    description = stringResource(R.string.meeting_photo_description),
-                    modifier = Modifier.fillMaxWidth().height(220.dp),
-                )
             }
             if (meeting.note.isNotBlank()) {
                 Text(

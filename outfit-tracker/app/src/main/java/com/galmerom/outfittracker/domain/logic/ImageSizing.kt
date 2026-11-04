@@ -2,6 +2,7 @@ package com.galmerom.outfittracker.domain.logic
 
 object ImageSizing {
     const val MAX_EDGE_PX = 1280
+    const val AVATAR_EDGE_PX = 512
 
     fun targetSize(width: Int, height: Int, maxEdge: Int = MAX_EDGE_PX): Pair<Int, Int> {
         if (width <= 0 || height <= 0 || maxEdge <= 0) return 0 to 0

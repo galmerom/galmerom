@@ -1,6 +1,8 @@
 package com.galmerom.outfittracker.data.ai
 
+import android.util.Log
 import com.galmerom.outfittracker.domain.GarmentDetector
+import com.galmerom.outfittracker.domain.logic.AiErrorText
 import com.galmerom.outfittracker.domain.logic.GarmentResponseParser
 import com.galmerom.outfittracker.domain.model.ClothingCategory
 import com.galmerom.outfittracker.domain.model.DefaultCategories
@@ -13,13 +15,16 @@ import com.google.firebase.ai.type.content
 import com.google.firebase.ai.type.generationConfig
 import kotlin.coroutines.cancellation.CancellationException
 
-class FirebaseAiGarmentDetector : GarmentDetector {
+class FirebaseAiGarmentDetector(
+    private val debugSecret: () -> String? = { null },
+) : GarmentDetector {
     override suspend fun detect(
         jpeg: ByteArray,
         categories: List<ClothingCategory>,
     ): Result<List<DetectedGarment>> {
         val known = categories.ifEmpty { DefaultCategories.seeds }
         val allowed = known.map { it.id }.toSet()
+        val names = known.associate { it.name to it.id }
         return try {
             val schema = Schema.obj(
                 mapOf(
@@ -47,11 +52,32 @@ class FirebaseAiGarmentDetector : GarmentDetector {
                     text(prompt(known))
                 },
             )
-            Result.success(GarmentResponseParser.parse(response.text.orEmpty(), allowed))
+            val text = response.text
+            if (text.isNullOrBlank()) {
+                return Result.failure(IllegalStateException("empty model response"))
+            }
+            val garments = GarmentResponseParser.parse(text, allowed, names)
+            if (garments.isEmpty()) {
+                Log.w(TAG, "garment detection parsed nothing: ${text.take(400)}")
+            } else {
+                Log.i(TAG, "garment detection found ${garments.size}")
+            }
+            Result.success(garments)
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Exception) {
-            Result.failure(error)
+            Log.e(TAG, "garment detection failed", error)
+            Result.failure(IllegalStateException(shownReason(error), error))
+        }
+    }
+
+    private fun shownReason(error: Throwable): String {
+        val reason = AiErrorText.reason(error)
+        val token = runCatching { debugSecret() }.getOrNull()
+        return if (!token.isNullOrBlank() && reason.contains("App Check")) {
+            "$reason. אסימון: $token"
+        } else {
+            reason
         }
     }
 
@@ -69,5 +95,6 @@ class FirebaseAiGarmentDetector : GarmentDetector {
 
     private companion object {
         const val MODEL = "gemini-3.8-flash"
+        const val TAG = "OutfitTracker"
     }
 }

@@ -4,14 +4,18 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -26,6 +30,8 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -48,8 +54,11 @@ import com.galmerom.outfittracker.domain.model.EntityType
 import com.galmerom.outfittracker.domain.repository.EntityRepository
 import com.galmerom.outfittracker.ui.LocalAppContainer
 import com.galmerom.outfittracker.ui.UserMessage
+import com.galmerom.outfittracker.domain.logic.ImageSizing
 import com.galmerom.outfittracker.ui.common.EmptyState
+import com.galmerom.outfittracker.ui.common.EntityAvatar
 import com.galmerom.outfittracker.ui.common.appCardColors
+import com.galmerom.outfittracker.ui.common.rememberPhotoActions
 import com.galmerom.outfittracker.ui.common.appCardElevation
 import com.galmerom.outfittracker.ui.common.appTextFieldColors
 import com.galmerom.outfittracker.ui.common.labelRes
@@ -63,17 +72,43 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun EntityListScreen(onAdd: () -> Unit, onEdit: (String) -> Unit, onHidden: () -> Unit) {
+fun EntityListScreen(
+    onAdd: () -> Unit,
+    onEdit: (String) -> Unit,
+    onHidden: () -> Unit,
+    onHome: () -> Unit,
+    showSaved: Boolean,
+    onSavedShown: () -> Unit,
+) {
     val repo = LocalAppContainer.current.entityRepository ?: return
     val viewModel: EntityListViewModel = viewModel(factory = viewModelFactory { EntityListViewModel(repo) })
     val entities by viewModel.visible.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     val context = LocalContext.current
     LaunchedEffect(viewModel) { viewModel.messages.collect { snackbar.showSnackbar(context.textFor(it)) } }
+    LaunchedEffect(showSaved) {
+        if (showSaved) {
+            snackbar.showSnackbar(context.getString(R.string.saved))
+            onSavedShown()
+        }
+    }
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbar) },
+        topBar = {
+            TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    titleContentColor = MaterialTheme.colorScheme.onBackground,
+                ),
+                title = { Text(stringResource(R.string.entities_title)) },
+                actions = {
+                    TextButton(onClick = onHome) { Text(stringResource(R.string.back_home)) }
+                },
+            )
+        },
         floatingActionButton = {
             ExtendedFloatingActionButton(
                 onClick = onAdd,
@@ -106,9 +141,27 @@ fun EntityListScreen(onAdd: () -> Unit, onEdit: (String) -> Unit, onHidden: () -
                     colors = appCardColors(),
                     elevation = appCardElevation(),
                 ) {
-                    Column(Modifier.padding(16.dp)) {
-                        Text(entity.name, style = MaterialTheme.typography.titleMedium)
-                        Text(stringResource(entity.type.labelRes()), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Row(
+                        Modifier.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        EntityAvatar(entity.photoUrl, entity.name, size = 48.dp)
+                        Column {
+                            Text(entity.name, style = MaterialTheme.typography.titleMedium)
+                            if (entity.description.isNotBlank()) {
+                                Text(
+                                    entity.description,
+                                    maxLines = 1,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            Text(
+                                stringResource(entity.type.labelRes()),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
                     }
                 }
             }
@@ -154,7 +207,7 @@ fun HiddenEntitiesScreen(onBack: () -> Unit) {
 }
 
 @Composable
-fun EntityEditScreen(entityId: String, onBack: () -> Unit) {
+fun EntityEditScreen(entityId: String, onBack: () -> Unit, onSaved: () -> Unit) {
     val repo = LocalAppContainer.current.entityRepository ?: return
     val viewModel: EntityEditViewModel = viewModel(
         key = entityId,
@@ -170,15 +223,52 @@ fun EntityEditScreen(entityId: String, onBack: () -> Unit) {
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
         Column(
-            Modifier.fillMaxSize().padding(padding).padding(20.dp),
+            Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .verticalScroll(rememberScrollState())
+                .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            val photoActions = rememberPhotoActions(
+                onJpeg = viewModel::onPhoto,
+                onFailure = { viewModel.notify(UserMessage.GENERIC) },
+                onDenied = { viewModel.notify(UserMessage.CAMERA_PERMISSION) },
+                maxEdge = ImageSizing.AVATAR_EDGE_PX,
+            )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                EntityAvatar(
+                    photoUrl = state.photoUrl,
+                    jpeg = state.photoJpeg,
+                    label = state.name,
+                    size = 72.dp,
+                )
+                Column {
+                    Text(
+                        stringResource(
+                            if (state.type == EntityType.FORUM) R.string.entity_logo else R.string.entity_photo,
+                        ),
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(onClick = photoActions.onCamera) { Text(stringResource(R.string.clothing_camera)) }
+                        TextButton(onClick = photoActions.onGallery) { Text(stringResource(R.string.clothing_gallery)) }
+                    }
+                }
+            }
             OutlinedTextField(
                 value = state.name,
                 onValueChange = viewModel::onName,
                 label = { Text(stringResource(R.string.entity_name)) },
                 colors = appTextFieldColors(),
                 modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = state.description,
+                onValueChange = viewModel::onDescription,
+                label = { Text(stringResource(R.string.entity_description)) },
+                colors = appTextFieldColors(),
+                modifier = Modifier.fillMaxWidth(),
+                minLines = 2,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(
@@ -229,7 +319,11 @@ fun EntityEditScreen(entityId: String, onBack: () -> Unit) {
                     enabled = newMember.isNotBlank(),
                 ) { Text(stringResource(R.string.entity_member_add)) }
             }
-            TextButton(onClick = viewModel::save) { Text(stringResource(R.string.save)) }
+            Button(
+                onClick = { viewModel.save(onSaved) },
+                enabled = !state.saving,
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text(stringResource(R.string.save)) }
             TextButton(onClick = onBack) { Text(stringResource(R.string.back)) }
         }
     }
@@ -259,11 +353,15 @@ class EntityListViewModel(private val repo: EntityRepository) : ViewModel() {
 
 data class EntityEditState(
     val name: String = "",
+    val description: String = "",
     val type: EntityType = EntityType.PERSON,
     val hidden: Boolean = false,
     val memberIds: List<String> = emptyList(),
     val all: List<Entity> = emptyList(),
     val savedId: String? = null,
+    val photoUrl: String? = null,
+    val photoJpeg: ByteArray? = null,
+    val saving: Boolean = false,
 )
 
 class EntityEditViewModel(
@@ -285,10 +383,12 @@ class EntityEditViewModel(
                     _state.update {
                         it.copy(
                             name = current.name,
+                            description = current.description,
                             type = current.type,
                             hidden = current.hidden,
                             memberIds = current.memberIds,
                             savedId = current.id,
+                            photoUrl = current.photoUrl,
                         )
                     }
                 }
@@ -301,7 +401,10 @@ class EntityEditViewModel(
     }
 
     fun onName(value: String) = _state.update { it.copy(name = value) }
+    fun onDescription(value: String) = _state.update { it.copy(description = value) }
+    fun onPhoto(jpeg: ByteArray) = _state.update { it.copy(photoJpeg = jpeg) }
     fun onType(value: EntityType) = _state.update { it.copy(type = value) }
+    fun notify(message: UserMessage) = _messages.tryEmit(message)
     fun onHidden(value: Boolean) {
         _state.update { it.copy(hidden = value) }
         val id = _state.value.savedId ?: return
@@ -323,23 +426,37 @@ class EntityEditViewModel(
         }
     }
 
-    fun save() {
+    fun save(onSaved: () -> Unit) {
         val current = _state.value
+        if (current.saving) return
         if (current.name.isBlank()) {
-            _messages.tryEmit(UserMessage.NEED_DESCRIPTION)
+            _messages.tryEmit(UserMessage.NEED_NAME)
             return
         }
         viewModelScope.launch {
+            _state.update { it.copy(saving = true) }
             val id = current.savedId
-            if (id == null) {
-                repo.create(current.name, current.type).onSuccess { created ->
-                    _state.update { it.copy(savedId = created.id) }
-                    if (current.hidden) repo.setHidden(created.id, true)
-                    _messages.emit(UserMessage.CLOTHING_SAVED)
-                }.onFailure { _messages.emit(it.toUserMessage()) }
+            val failure = if (id == null) {
+                repo.create(current.name, current.type, current.description, current.photoJpeg)
+                    .onSuccess { created ->
+                        if (current.hidden) repo.setHidden(created.id, true)
+                    }
+                    .exceptionOrNull()
             } else {
-                repo.update(id, current.name, current.type).onFailure { _messages.emit(it.toUserMessage()) }
-                    .onSuccess { _messages.emit(UserMessage.CLOTHING_SAVED) }
+                repo.update(
+                    id,
+                    current.name,
+                    current.type,
+                    current.description,
+                    current.photoJpeg,
+                    current.photoUrl,
+                ).exceptionOrNull()
+            }
+            if (failure == null) {
+                onSaved()
+            } else {
+                _state.update { it.copy(saving = false) }
+                _messages.emit(failure.toUserMessage())
             }
         }
     }

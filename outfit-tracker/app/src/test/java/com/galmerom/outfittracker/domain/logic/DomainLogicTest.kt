@@ -1,5 +1,6 @@
 package com.galmerom.outfittracker.domain.logic
 
+import com.galmerom.outfittracker.domain.model.ClothingCategory
 import com.galmerom.outfittracker.domain.model.ClothingItem
 import com.galmerom.outfittracker.domain.model.DetectedGarment
 import com.galmerom.outfittracker.domain.model.Entity
@@ -105,6 +106,43 @@ class DomainLogicTest {
         val parsed = GarmentResponseParser.parse(raw, setOf("shirt", "pants", "shoes"))
         assertEquals(listOf(DetectedGarment("shirt", "חולצה לבנה")), parsed)
         assertTrue(GarmentResponseParser.parse("no json").isEmpty())
+        val wrapped = """{"garments":[{"category":"חולצה","description":"חולצה לבנה ] עם פס"},{"category":"pants","description":"מכנסיים כהים"}]}"""
+        assertEquals(
+            listOf(
+                DetectedGarment("shirt", "חולצה לבנה ] עם פס"),
+                DetectedGarment("pants", "מכנסיים כהים"),
+            ),
+            GarmentResponseParser.parse(wrapped, setOf("shirt", "pants"), mapOf("חולצה" to "shirt")),
+        )
+    }
+
+    @Test
+    fun aiErrorText_explainsDepletedGeminiCredits() {
+        val reason = AiErrorText.reason(IllegalStateException("Your prepayment credits are depleted"))
+        assertTrue(reason.contains("קרדיט"))
+    }
+
+    @Test
+    fun categoryOrder_putsPantsAndShirtFirstUnlessAlreadyCustom() {
+        val legacy = listOf(
+            ClothingCategory("shirt", "חולצה", 0),
+            ClothingCategory("pants", "מכנסיים", 1),
+            ClothingCategory("skirt", "חצאית", 2),
+            ClothingCategory("dress", "שמלה", 3),
+            ClothingCategory("jacket", "ז׳קט", 4),
+            ClothingCategory("shoes", "נעליים", 5),
+            ClothingCategory("accessory", "אביזר", 6),
+            ClothingCategory("other", "אחר", 7),
+        )
+        val updates = CategoryOrder.migrationUpdates(legacy)
+        assertEquals(0, updates?.get("pants"))
+        assertEquals(1, updates?.get("shirt"))
+        assertEquals(2, updates?.get("skirt"))
+        val custom = legacy.map { category ->
+            if (category.id == "shoes") category.copy(sortOrder = 0) else category.copy(sortOrder = category.sortOrder + 1)
+        }
+        assertNull(CategoryOrder.migrationUpdates(custom))
+        assertEquals(mapOf("pants" to 0, "shirt" to 1), CategoryOrder.sortOrders(listOf("pants", "shirt")))
     }
 
     @Test

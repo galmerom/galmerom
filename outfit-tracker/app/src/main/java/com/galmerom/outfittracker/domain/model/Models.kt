@@ -10,8 +10,8 @@ data class ClothingCategory(
 
 object DefaultCategories {
     val seeds: List<ClothingCategory> = listOf(
-        ClothingCategory("shirt", "חולצה", 0),
-        ClothingCategory("pants", "מכנסיים", 1),
+        ClothingCategory("pants", "מכנסיים", 0),
+        ClothingCategory("shirt", "חולצה", 1),
         ClothingCategory("skirt", "חצאית", 2),
         ClothingCategory("dress", "שמלה", 3),
         ClothingCategory("jacket", "ז׳קט", 4),
@@ -46,6 +46,8 @@ data class Entity(
     val type: EntityType,
     val hidden: Boolean = false,
     val memberIds: List<String> = emptyList(),
+    val description: String = "",
+    val photoUrl: String? = null,
 )
 
 data class ClothingItem(

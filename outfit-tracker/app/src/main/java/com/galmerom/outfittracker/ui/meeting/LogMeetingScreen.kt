@@ -1,5 +1,6 @@
 package com.galmerom.outfittracker.ui.meeting
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -13,10 +14,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.outlined.DateRange
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
@@ -43,6 +46,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -56,6 +60,7 @@ import com.galmerom.outfittracker.ui.LocalAppContainer
 import com.galmerom.outfittracker.ui.common.CategoryDropdown
 import com.galmerom.outfittracker.ui.common.ClearTextButton
 import com.galmerom.outfittracker.ui.common.ClothingImage
+import com.galmerom.outfittracker.ui.common.EntityAvatar
 import com.galmerom.outfittracker.ui.common.ClothingItemMenu
 import com.galmerom.outfittracker.ui.common.SectionTitle
 import com.galmerom.outfittracker.ui.common.appCardColors
@@ -123,6 +128,13 @@ fun LogMeetingScreen(meetingId: String? = null) {
                     }
                 }
             }
+            if (state.selectedEntities.isNotEmpty()) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    state.selectedEntities.forEach { selected ->
+                        Text(selected.name, style = MaterialTheme.typography.titleLarge)
+                    }
+                }
+            }
             OutlinedTextField(
                 value = state.entityQuery,
                 onValueChange = viewModel::onQuery,
@@ -141,6 +153,9 @@ fun LogMeetingScreen(meetingId: String? = null) {
                             selected = true,
                             onClick = { viewModel.removeEntity(selected.id) },
                             label = { Text(selected.name) },
+                            avatar = {
+                                EntityAvatar(selected.photoUrl, selected.name, size = 24.dp)
+                            },
                         )
                     }
                 }
@@ -157,10 +172,20 @@ fun LogMeetingScreen(meetingId: String? = null) {
                     colors = appCardColors(),
                     elevation = appCardElevation(),
                 ) {
-                    Text(
-                        text = "${entity.name} · ${stringResource(entity.type.labelRes())}",
-                        modifier = Modifier.padding(14.dp),
-                    )
+                    Row(
+                        Modifier.padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        EntityAvatar(entity.photoUrl, entity.name, size = 40.dp)
+                        Column {
+                            Text(entity.name, style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                stringResource(entity.type.labelRes()),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
                 }
             }
             if (state.offerCreate) {
@@ -192,9 +217,12 @@ fun LogMeetingScreen(meetingId: String? = null) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             DetectionBlock(
-                jpeg = state.detectionPhoto,
+                jpeg = state.meetingPhoto,
+                existingUrl = state.existingPhotoUrl,
                 detecting = state.detecting,
-                onPhoto = viewModel::onDetectionPhoto,
+                detectedCount = state.detectedCount,
+                detectionError = state.detectionError,
+                onPhoto = viewModel::onOutfitPhoto,
                 onDetect = viewModel::detect,
                 onDenied = { viewModel.notify(UserMessage.CAMERA_PERMISSION) },
                 onFailure = { viewModel.notify(UserMessage.GENERIC) },
@@ -228,7 +256,12 @@ fun LogMeetingScreen(meetingId: String? = null) {
 
             SectionTitle(stringResource(R.string.clothes_section))
             state.rows.forEach { row ->
-                ClothingPickRowCard(state = state, row = row, viewModel = viewModel)
+                ClothingPickRowCard(
+                    state = state,
+                    row = row,
+                    viewModel = viewModel,
+                    warning = row.itemId?.let { state.warnings[it] },
+                )
             }
             OutlinedButton(onClick = viewModel::addClothingRow, modifier = Modifier.fillMaxWidth()) {
                 Text(stringResource(R.string.clothes_add_row))
@@ -243,18 +276,27 @@ fun LogMeetingScreen(meetingId: String? = null) {
             } else {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     selected.forEach { item ->
-                        Column {
+                        val warning = state.warnings[item.id]
+                        if (warning == null) {
                             InputChip(
                                 selected = true,
                                 onClick = { viewModel.removeClothing(item.id) },
                                 label = { Text(item.description) },
                             )
-                            state.warnings[item.id]?.let { warning ->
-                                Text(
-                                    warningText(warning),
-                                    color = MaterialTheme.colorScheme.error,
-                                    style = MaterialTheme.typography.bodySmall,
-                                )
+                        } else {
+                            Card(
+                                colors = warningCardColors(warning),
+                                border = BorderStroke(3.dp, MaterialTheme.colorScheme.error),
+                                shape = MaterialTheme.shapes.medium,
+                            ) {
+                                Column(Modifier.padding(10.dp)) {
+                                    InputChip(
+                                        selected = true,
+                                        onClick = { viewModel.removeClothing(item.id) },
+                                        label = { Text(item.description) },
+                                    )
+                                    RepeatWarningBanner(warning)
+                                }
                             }
                         }
                     }
@@ -272,22 +314,6 @@ fun LogMeetingScreen(meetingId: String? = null) {
                 shape = MaterialTheme.shapes.extraSmall,
                 modifier = Modifier.fillMaxWidth(),
                 minLines = 2,
-            )
-            Text(stringResource(R.string.meeting_photo), style = MaterialTheme.typography.titleSmall)
-            if (state.meetingPhoto == null && !state.existingPhotoUrl.isNullOrBlank()) {
-                ClothingImage(
-                    jpeg = null,
-                    url = state.existingPhotoUrl,
-                    description = stringResource(R.string.meeting_photo_description),
-                    modifier = Modifier.fillMaxWidth().height(160.dp),
-                )
-            }
-            PhotoBlock(
-                jpeg = state.meetingPhoto,
-                description = stringResource(R.string.meeting_photo_description),
-                onPhoto = viewModel::onMeetingPhoto,
-                onDenied = { viewModel.notify(UserMessage.CAMERA_PERMISSION) },
-                onFailure = { viewModel.notify(UserMessage.GENERIC) },
             )
             Button(
                 onClick = viewModel::save,
@@ -347,10 +373,40 @@ private fun warningText(warning: RepeatWarning): String {
 }
 
 @Composable
+private fun RepeatWarningBanner(warning: RepeatWarning) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Icon(Icons.Filled.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+        Text(
+            warningText(warning),
+            color = MaterialTheme.colorScheme.onErrorContainer,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+        )
+    }
+}
+
+@Composable
+private fun warningCardColors(warning: RepeatWarning?) = if (warning == null) {
+    appCardColors()
+} else {
+    CardDefaults.cardColors(
+        containerColor = MaterialTheme.colorScheme.errorContainer,
+        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+    )
+}
+
+@Composable
 private fun ClothingPickRowCard(
     state: LogMeetingUiState,
     row: ClothingPickRow,
     viewModel: LogMeetingViewModel,
+    warning: RepeatWarning?,
 ) {
     val inCategory = state.selectable.filter { row.categoryId.isBlank() || it.categoryId == row.categoryId }
     val hits = if (row.query.isBlank()) {
@@ -362,10 +418,14 @@ private fun ClothingPickRowCard(
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.medium,
-        colors = appCardColors(),
+        colors = warningCardColors(warning),
         elevation = appCardElevation(),
+        border = if (warning != null) BorderStroke(3.dp, MaterialTheme.colorScheme.error) else null,
     ) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (warning != null) {
+                RepeatWarningBanner(warning)
+            }
             CategoryDropdown(
                 categories = state.categories,
                 categoryId = row.categoryId,
@@ -406,7 +466,10 @@ private fun ClothingPickRowCard(
 @Composable
 private fun DetectionBlock(
     jpeg: ByteArray?,
+    existingUrl: String?,
     detecting: Boolean,
+    detectedCount: Int?,
+    detectionError: String?,
     onPhoto: (ByteArray) -> Unit,
     onDetect: () -> Unit,
     onDenied: () -> Unit,
@@ -414,17 +477,33 @@ private fun DetectionBlock(
 ) {
     PhotoBlock(
         jpeg = jpeg,
-        description = stringResource(R.string.ai_section),
+        existingUrl = if (jpeg == null) existingUrl else null,
+        description = stringResource(R.string.meeting_photo_description),
         onPhoto = onPhoto,
         onDenied = onDenied,
         onFailure = onFailure,
     )
-    Button(onClick = onDetect, enabled = jpeg != null && !detecting) {
-        if (detecting) {
-            Text(stringResource(R.string.ai_detecting))
-        } else {
-            Text(stringResource(R.string.ai_detect))
+    when {
+        detecting -> Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            CircularProgressIndicator(Modifier.size(22.dp))
+            Text(stringResource(R.string.ai_detecting), style = MaterialTheme.typography.titleMedium)
         }
+        detectionError != null -> Text(
+            stringResource(R.string.ai_failed_reason, detectionError),
+            color = MaterialTheme.colorScheme.error,
+            style = MaterialTheme.typography.bodyLarge,
+        )
+        detectedCount != null -> Text(
+            stringResource(R.string.ai_detected_count, detectedCount),
+            color = MaterialTheme.colorScheme.primary,
+            style = MaterialTheme.typography.titleMedium,
+        )
+    }
+    Button(onClick = onDetect, enabled = jpeg != null && !detecting) {
+        Text(stringResource(R.string.ai_detect))
     }
 }
 
@@ -435,14 +514,15 @@ private fun PhotoBlock(
     onPhoto: (ByteArray) -> Unit,
     onDenied: () -> Unit,
     onFailure: () -> Unit,
+    existingUrl: String? = null,
 ) {
     val actions = rememberPhotoActions(onJpeg = onPhoto, onFailure = onFailure, onDenied = onDenied)
-    if (jpeg != null) {
+    if (jpeg != null || !existingUrl.isNullOrBlank()) {
         ClothingImage(
             jpeg = jpeg,
-            url = null,
+            url = existingUrl,
             description = description,
-            modifier = Modifier.fillMaxWidth().height(160.dp),
+            modifier = Modifier.fillMaxWidth().height(220.dp),
         )
     }
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

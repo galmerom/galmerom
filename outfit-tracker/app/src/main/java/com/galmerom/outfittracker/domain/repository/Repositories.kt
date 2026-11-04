@@ -29,8 +29,20 @@ interface ClothingRepository {
 
 interface EntityRepository {
     fun observeAll(): Flow<List<Entity>>
-    suspend fun create(name: String, type: EntityType): Result<Entity>
-    suspend fun update(id: String, name: String, type: EntityType): Result<Unit>
+    suspend fun create(
+        name: String,
+        type: EntityType,
+        description: String = "",
+        photoJpeg: ByteArray? = null,
+    ): Result<Entity>
+    suspend fun update(
+        id: String,
+        name: String,
+        type: EntityType,
+        description: String = "",
+        photoJpeg: ByteArray? = null,
+        keepPhotoUrl: String? = null,
+    ): Result<Unit>
     suspend fun setHidden(id: String, hidden: Boolean): Result<Unit>
     suspend fun setMembers(forumId: String, memberIds: List<String>): Result<Unit>
 }
@@ -39,6 +51,7 @@ interface CategoryRepository {
     fun observeAll(): Flow<List<ClothingCategory>>
     suspend fun add(name: String): Result<ClothingCategory>
     suspend fun rename(id: String, name: String): Result<Unit>
+    suspend fun reorder(ids: List<String>): Result<Unit>
 }
 
 interface MeetingRepository {

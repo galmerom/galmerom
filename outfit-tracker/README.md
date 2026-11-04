@@ -8,14 +8,14 @@ The interface is Hebrew. The on-screen name for a person or forum is the string 
 
 Each signed-in user has their own data under `users/{uid}/`:
 
-- **entities** — `name`, `type` (`person` or `forum`), `hidden`, and for a forum `memberIds` (people who belong to it)
-- **categories** — user-defined names. Seeded once with shirt, pants, skirt, dress, jacket, shoes, accessory, and other. They can be renamed, not deleted.
+- **entities** — `name`, `type` (`person` or `forum`), `description`, `photoUrl`, `hidden`, and for a forum `memberIds` (people who belong to it). Avatars are stored at `users/{uid}/avatars/{id}.jpg`.
+- **categories** — user-defined names with `sortOrder`. Seeded once with pants, shirt, then skirt, dress, jacket, shoes, accessory, and other. They can be renamed and reordered, not deleted. An untouched original seed order is migrated so pants and shirt come first.
 - **clothingItems** — `description`, `categoryId`, `photoUrl`, `hidden`
 - **meetings** — `date` (`YYYY-MM-DD`), `entityId`, `entityName`, `clothingItemIds`, optional `photoUrl`, `note`
 
 Photos are downscaled on the phone to about 1280px JPEG, then uploaded to Cloud Storage at `users/{uid}/…`. Sign-in is Firebase Auth with the user's Google account through Credential Manager, so the wardrobe survives replacing the phone. Firestore disk persistence is turned on and syncs when the network is back.
 
-Garment detection goes through `GarmentDetector`. The implementation calls Gemini with Firebase AI Logic (`firebase-ai`). If the call fails or returns nothing, the meeting screen stays on manual selection.
+Garment detection goes through `GarmentDetector`. The implementation calls Gemini with Firebase AI Logic (`firebase-ai`, model `gemini-3.8-flash`, Gemini Developer API). The meeting photo is saved with the meeting even when detection fails, and the screen shows a Hebrew error with the short reason. Debug builds install the App Check debug provider. A call still fails until the Firebase project has Gemini credit and, if App Check is enforced, the debug token from the error (or logcat tag `OutfitTracker`) is registered under App Check.
 
 `app/google-services.json` is committed for this personal debug app. The Google Services plugin still applies only when that file exists, so a checkout without it still builds and shows a setup message instead of crashing. When the file is present, sign-in uses the generated string `default_web_client_id` (the OAuth web client, `client_type` 3).
 
@@ -23,7 +23,7 @@ Debug builds are signed with the committed PKCS12 keystore `app/outfit-debug.key
 
 ## Setup
 
-The Firebase project, Android app (`com.galmerom.outfittracker`), SHA-1/SHA-256 registration, Google sign-in provider, and Firestore/Storage rules are already in place. Firebase AI Logic (Gemini) still has to be enabled in that project if garment detection should run.
+The Firebase project, Android app (`com.galmerom.outfittracker`), SHA-1/SHA-256 registration, Google sign-in provider, and Firestore/Storage rules are already in place. Garment detection for project `outfit-tracker-d503e` currently fails because the Gemini prepayment credits are depleted. Restore them in AI Studio (https://ai.studio/projects). If the next error mentions App Check, register the debug token shown on the meeting screen under Firebase Console > App Check > Apps > Manage debug tokens.
 
 Build and install a debug APK:
 

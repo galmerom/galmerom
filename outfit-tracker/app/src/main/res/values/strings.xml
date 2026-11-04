@@ -64,6 +64,7 @@
     <string name="clothing_gallery">גלריה</string>
     <string name="clothing_revive">שחזור</string>
     <string name="clothing_saved">הפריט נשמר</string>
+    <string name="saved">נשמר</string>
     <string name="clothing_description_required">צריך תיאור.</string>
     <string name="photo_description">תמונת הבגד</string>
 
@@ -104,10 +105,12 @@
     <string name="clothes_remove">הסרה מהמפגש</string>
     <string name="clothes_none_selected">עדיין לא נבחרו פרטי לבוש.</string>
     <string name="ai_section">זיהוי מתמונה</string>
-    <string name="ai_help">אפשר לצלם את התלבושת. אם הזיהוי נכשל, הבחירה הידנית נשארת פתוחה.</string>
+    <string name="ai_help">צלמי את התלבושת. התמונה נשמרת עם המפגש, גם אם הזיהוי נכשל. אפשר תמיד לבחור ידנית.</string>
     <string name="ai_detect">זיהוי פרטי לבוש</string>
-    <string name="ai_detecting">מזהה פרטי לבוש…</string>
+    <string name="ai_detecting">מזהה…</string>
     <string name="ai_failed">הזיהוי לא זמין כרגע. אפשר לבחור פרטי לבוש ידנית.</string>
+    <string name="ai_failed_reason">הזיהוי נכשל: %1$s. אפשר לבחור ידנית.</string>
+    <string name="ai_detected_count">זוהו %1$d פריטים</string>
     <string name="ai_empty">לא זוהו פרטי לבוש. אפשר לבחור ידנית.</string>
     <string name="ai_match">כבר בארון: %1$s</string>
     <string name="ai_new">פריט חדש לארון</string>
@@ -126,6 +129,12 @@
     <string name="meeting_detail_title">פרטי מפגש</string>
     <string name="meeting_clothes">פרטי הלבוש שנלבשו</string>
     <string name="forum_meeting_badge">פורום: %1$s</string>
+    <string name="entities_title">אנשים/פורומים</string>
+    <string name="entity_description">תיאור</string>
+    <string name="entity_photo">תמונה</string>
+    <string name="entity_logo">לוגו</string>
+    <string name="entity_name_required">צריך שם.</string>
+    <string name="category_reorder">גרירה לשינוי הסדר</string>
     <string name="entities_empty">אין עדיין רשומות.</string>
     <string name="entities_hidden_empty">אין רשומות מוסתרות.</string>
     <string name="entity_add">הוספה</string>

@@ -57,14 +57,18 @@ class UserPreferences(context: Context) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val cached = MutableStateFlow(readCached())
     private var accountSyncStarted = false
+    private var localRevision = 0
+    private var ackedRevision = 0
 
     val prefs: StateFlow<UserPrefs> = cached
 
     fun setFontSize(size: FontSize) {
+        localRevision++
         update(cached.value.copy(fontSize = size))
     }
 
     fun setTheme(theme: AppTheme) {
+        localRevision++
         update(cached.value.copy(theme = theme))
     }
 
@@ -104,11 +108,13 @@ class UserPreferences(context: Context) {
     }
 
     private fun applyRemote(font: String?, theme: String?) {
+        if (localRevision != ackedRevision) return
         val next = UserPrefs(FontSize.fromKey(font), AppTheme.fromKey(theme))
         if (next != cached.value) update(next)
     }
 
     private suspend fun push(doc: com.google.firebase.firestore.DocumentReference) {
+        val revision = localRevision
         val current = cached.value
         doc.set(
             mapOf(
@@ -116,7 +122,9 @@ class UserPreferences(context: Context) {
                 "theme" to current.theme.key,
             ),
             SetOptions.merge(),
-        ).awaitCommitted()
+        ).awaitCommitted().onSuccess {
+            if (revision == localRevision) ackedRevision = revision
+        }
     }
 
     private fun readCached(): UserPrefs = runBlocking {

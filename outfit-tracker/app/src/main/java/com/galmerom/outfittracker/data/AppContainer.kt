@@ -85,10 +85,11 @@ class AppContainer(context: Context) {
                 status = if (webClientId == null) FirebaseStatus.MissingWebClient else FirebaseStatus.Ready
                 authRepository = FirebaseAuthRepository(auth, appContext, webClientId)
                 clothingRepository = FirestoreClothingRepository(firestore, auth, photos)
-                entityRepository = FirestoreEntityRepository(firestore, auth)
+                entityRepository = FirestoreEntityRepository(firestore, auth, photos)
+                AppCheckInstaller.install(appContext)
                 meetingRepository = FirestoreMeetingRepository(firestore, auth, photos)
                 categoryRepository = FirestoreCategoryRepository(firestore, auth)
-                detector = FirebaseAiGarmentDetector()
+                detector = FirebaseAiGarmentDetector { AppCheckInstaller.currentSecret(appContext) }
                 auth.addAuthStateListener { firebaseAuth ->
                     if (firebaseAuth.currentUser != null) {
                         preferences.startAccountSync(firestore, auth)

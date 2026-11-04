@@ -59,9 +59,10 @@ data class LogMeetingUiState(
     val selectedClothingIds: Set<String> = emptySet(),
     val note: String = "",
     val meetingPhoto: ByteArray? = null,
-    val detectionPhoto: ByteArray? = null,
     val aiSuggestions: List<AiSuggestion> = emptyList(),
     val detecting: Boolean = false,
+    val detectedCount: Int? = null,
+    val detectionError: String? = null,
     val saving: Boolean = false,
     val creatingEntity: Boolean = false,
 ) {
@@ -185,9 +186,17 @@ class LogMeetingViewModel(
 
     fun onNote(value: String) = _state.update { it.copy(note = value) }
 
-    fun onMeetingPhoto(jpeg: ByteArray) = _state.update { it.copy(meetingPhoto = jpeg) }
-
-    fun onDetectionPhoto(jpeg: ByteArray) = _state.update { it.copy(detectionPhoto = jpeg, aiSuggestions = emptyList()) }
+    fun onOutfitPhoto(jpeg: ByteArray) {
+        _state.update {
+            it.copy(
+                meetingPhoto = jpeg,
+                aiSuggestions = emptyList(),
+                detectedCount = null,
+                detectionError = null,
+            )
+        }
+        detect()
+    }
 
     fun toggleClothing(item: ClothingItem) = _state.update { state ->
         val ids = state.selectedClothingIds.toMutableSet()
@@ -258,30 +267,33 @@ class LogMeetingViewModel(
     }
 
     fun detect() {
-        val jpeg = _state.value.detectionPhoto ?: return
+        val jpeg = _state.value.meetingPhoto ?: return
         if (_state.value.detecting) return
         viewModelScope.launch {
-            _state.update { it.copy(detecting = true) }
+            _state.update { it.copy(detecting = true, detectionError = null) }
             detector.detect(jpeg, _state.value.categories).fold(
                 onSuccess = { garments ->
-                    if (garments.isEmpty()) {
-                        _state.update { it.copy(detecting = false, aiSuggestions = emptyList()) }
-                        report(UserMessage.AI_EMPTY)
-                    } else {
-                        val wardrobe = _state.value.wardrobe
-                        _state.update {
-                            it.copy(
-                                detecting = false,
-                                aiSuggestions = garments.map { garment ->
-                                    AiSuggestion(garment, WardrobeRules.match(garment, wardrobe))
-                                },
-                            )
-                        }
+                    val wardrobe = _state.value.wardrobe
+                    _state.update {
+                        it.copy(
+                            detecting = false,
+                            detectedCount = garments.size,
+                            detectionError = null,
+                            aiSuggestions = garments.map { garment ->
+                                AiSuggestion(garment, WardrobeRules.match(garment, wardrobe))
+                            },
+                        )
                     }
                 },
-                onFailure = {
-                    _state.update { it.copy(detecting = false, aiSuggestions = emptyList()) }
-                    report(UserMessage.AI_FAILED)
+                onFailure = { error ->
+                    _state.update {
+                        it.copy(
+                            detecting = false,
+                            detectedCount = null,
+                            detectionError = error.message?.takeIf { it.isNotBlank() } ?: "שגיאה לא ידועה",
+                            aiSuggestions = emptyList(),
+                        )
+                    }
                 },
             )
         }

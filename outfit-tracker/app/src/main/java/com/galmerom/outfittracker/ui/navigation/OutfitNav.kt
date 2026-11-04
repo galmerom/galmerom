@@ -343,11 +343,22 @@ private fun AppScaffold(user: SignedInUser) {
                     onEdit = { navController.navigate("log/$it") },
                 )
             }
-            composable(Routes.ENTITIES) {
+            composable(Routes.ENTITIES) { entry ->
+                val saved by entry.savedStateHandle
+                    .getStateFlow("entitySaved", false)
+                    .collectAsStateWithLifecycle()
                 EntityListScreen(
                     onAdd = { navController.navigate(Routes.entity(EntityEditViewModel.NEW)) },
                     onEdit = { navController.navigate(Routes.entity(it)) },
                     onHidden = { navController.navigate(Routes.ENTITIES_HIDDEN) },
+                    onHome = {
+                        navController.navigate(Routes.HOME) {
+                            popUpTo(Routes.HOME) { inclusive = false }
+                            launchSingleTop = true
+                        }
+                    },
+                    showSaved = saved,
+                    onSavedShown = { entry.savedStateHandle["entitySaved"] = false },
                 )
             }
             composable(Routes.ENTITIES_HIDDEN) {
@@ -360,6 +371,10 @@ private fun AppScaffold(user: SignedInUser) {
                 EntityEditScreen(
                     entityId = entry.arguments?.getString("entityId").orEmpty(),
                     onBack = { navController.popBackStack() },
+                    onSaved = {
+                        navController.previousBackStackEntry?.savedStateHandle?.set("entitySaved", true)
+                        navController.popBackStack()
+                    },
                 )
             }
             composable(Routes.CATEGORIES) {
@@ -378,8 +393,8 @@ private fun HomeScreen(onNewMeeting: () -> Unit, onSearch: () -> Unit, onWardrob
     ) {
         Text(stringResource(R.string.hello), style = MaterialTheme.typography.headlineMedium)
         HomeButton(stringResource(R.string.home_new_meeting), onNewMeeting)
-        HomeButton(stringResource(R.string.nav_search), onSearch)
         HomeButton(stringResource(R.string.nav_wardrobe), onWardrobe)
+        HomeButton(stringResource(R.string.nav_search), onSearch)
     }
 }
 
