@@ -104,7 +104,7 @@ fun ClothingItemMenu(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             ClothingImage(
                                 jpeg = null,
-                                url = item.photoUrl,
+                                url = item.shownPhotoUrl(),
                                 description = item.description,
                                 modifier = Modifier.size(40.dp),
                             )

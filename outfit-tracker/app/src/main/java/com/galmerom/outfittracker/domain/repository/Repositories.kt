@@ -23,8 +23,14 @@ interface AuthRepository {
 
 interface ClothingRepository {
     fun observeAll(): Flow<List<ClothingItem>>
-    suspend fun upsert(item: ClothingItem, photoJpeg: ByteArray?): Result<Pair<ClothingItem, SaveOutcome>>
+    suspend fun upsert(
+        item: ClothingItem,
+        photoJpeg: ByteArray?,
+        originalJpeg: ByteArray? = null,
+    ): Result<Pair<ClothingItem, SaveOutcome>>
     suspend fun setHidden(id: String, hidden: Boolean): Result<Unit>
+    suspend fun saveCutout(id: String, processedJpeg: ByteArray, originalUrl: String): Result<Unit>
+    suspend fun downloadPhoto(url: String): Result<ByteArray>
 }
 
 interface EntityRepository {

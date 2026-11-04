@@ -56,7 +56,18 @@ data class ClothingItem(
     val categoryId: String,
     val photoUrl: String?,
     val hidden: Boolean,
-)
+    val originalPhotoUrl: String? = null,
+    val backgroundRemoved: Boolean = false,
+) {
+    fun shownPhotoUrl(): String? = when {
+        backgroundRemoved -> photoUrl
+        !originalPhotoUrl.isNullOrBlank() -> originalPhotoUrl
+        else -> photoUrl
+    }
+
+    fun hasCutoutChoice(): Boolean =
+        !photoUrl.isNullOrBlank() && !originalPhotoUrl.isNullOrBlank() && photoUrl != originalPhotoUrl
+}
 
 data class Meeting(
     val id: String,

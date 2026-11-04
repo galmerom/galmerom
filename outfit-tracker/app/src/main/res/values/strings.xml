@@ -52,6 +52,14 @@
     <string name="wardrobe_empty">אין עדיין פרטי לבוש בארון.</string>
     <string name="wardrobe_add">הוספת פריט</string>
     <string name="wardrobe_hidden">פריטים מוסתרים</string>
+    <string name="improve_photos">שיפור תמונות</string>
+    <string name="improve_progress">משפרת %1$d/%2$d</string>
+    <string name="improve_done">עודכנו %1$d תמונות</string>
+    <string name="improve_none">אין תמונות לשיפור</string>
+    <string name="cutout_kept">לא הצלחנו להסיר את הרקע. נשמרה התמונה המקורית.</string>
+    <string name="cutout_working">מסירה את הרקע…</string>
+    <string name="cutout_processed">רקע לבן</string>
+    <string name="cutout_original">תמונה מקורית</string>
     <string name="wardrobe_hidden_empty">אין פריטים מוסתרים.</string>
     <string name="clothing_new_title">פריט חדש</string>
     <string name="clothing_edit_title">עריכת פריט לבוש</string>

@@ -83,7 +83,7 @@ class FirebaseAiGarmentDetector : GarmentDetector {
         val gate = Semaphore(4)
         items.map { item ->
             async {
-                val url = item.photoUrl ?: return@async null
+                val url = item.shownPhotoUrl() ?: return@async null
                 val bytes = gate.withPermit { thumb(url) } ?: return@async null
                 item.id to bytes
             }

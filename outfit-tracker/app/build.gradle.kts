@@ -79,6 +79,7 @@ dependencies {
     implementation(libs.firebase.auth)
     implementation(libs.firebase.firestore)
     implementation(libs.firebase.storage)
+    implementation(libs.mlkit.subject.segmentation)
     implementation(libs.firebase.ai)
     debugImplementation(libs.firebase.appcheck.debug)
 

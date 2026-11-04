@@ -2,6 +2,8 @@ package com.galmerom.outfittracker.data
 
 import android.content.Context
 import com.galmerom.outfittracker.data.ai.FirebaseAiGarmentDetector
+import com.galmerom.outfittracker.data.photo.SubjectBackgroundRemover
+import com.galmerom.outfittracker.domain.BackgroundRemover
 import com.galmerom.outfittracker.data.auth.FirebaseAuthRepository
 import com.galmerom.outfittracker.data.firestore.FirestoreCategoryRepository
 import com.galmerom.outfittracker.data.firestore.FirestoreClothingRepository
@@ -38,6 +40,7 @@ class AppContainer(context: Context) {
     val meetingRepository: MeetingRepository?
     val categoryRepository: CategoryRepository?
     val detector: GarmentDetector?
+    val backgroundRemover: BackgroundRemover = SubjectBackgroundRemover(context.applicationContext)
     val preferences: UserPreferences
     private var firestoreRef: FirebaseFirestore? = null
     private var authRef: FirebaseAuth? = null

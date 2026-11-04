@@ -289,7 +289,7 @@ fun MeetingDetailScreen(meetingId: String, onBack: () -> Unit, onEdit: (String) 
                         ) {
                             ClothingImage(
                                 jpeg = null,
-                                url = item.photoUrl,
+                                url = item.shownPhotoUrl(),
                                 description = item.description,
                                 modifier = Modifier.size(64.dp),
                             )

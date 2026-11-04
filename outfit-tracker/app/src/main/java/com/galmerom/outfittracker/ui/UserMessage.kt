@@ -18,6 +18,7 @@ enum class UserMessage {
     NEED_NAME,
     MEETING_SAVED,
     SAVED_WITHOUT_PHOTO,
+    CUTOUT_KEPT_ORIGINAL,
 }
 
 fun Throwable.toUserMessage(): UserMessage = when (errorKind()) {
@@ -38,4 +39,5 @@ fun Context.textFor(message: UserMessage): String = when (message) {
     UserMessage.NEED_NAME -> getString(R.string.entity_name_required)
     UserMessage.MEETING_SAVED -> getString(R.string.meeting_saved)
     UserMessage.SAVED_WITHOUT_PHOTO -> getString(R.string.saved_without_photo)
+    UserMessage.CUTOUT_KEPT_ORIGINAL -> getString(R.string.cutout_kept)
 }

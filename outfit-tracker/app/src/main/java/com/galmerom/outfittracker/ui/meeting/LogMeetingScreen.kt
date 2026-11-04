@@ -101,7 +101,15 @@ fun LogMeetingScreen(
     val viewModel: LogMeetingViewModel = viewModel(
         key = meetingId ?: "new",
         factory = viewModelFactory {
-            LogMeetingViewModel(clothing, entities, meetings, categoriesRepo, detector, meetingId)
+            LogMeetingViewModel(
+                clothing,
+                entities,
+                meetings,
+                categoriesRepo,
+                detector,
+                container.backgroundRemover,
+                meetingId,
+            )
         },
     )
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -289,7 +297,7 @@ fun LogMeetingScreen(
                                 Card(onClick = { zoomItem = item }) {
                                     ClothingImage(
                                         jpeg = null,
-                                        url = item.photoUrl,
+                                        url = item.shownPhotoUrl(),
                                         description = item.description,
                                         modifier = Modifier.size(56.dp),
                                     )
@@ -400,7 +408,7 @@ fun LogMeetingScreen(
             text = {
                 ClothingImage(
                     jpeg = null,
-                    url = item.photoUrl,
+                    url = item.shownPhotoUrl(),
                     description = item.description,
                     modifier = Modifier.fillMaxWidth().height(360.dp),
                 )
@@ -526,7 +534,7 @@ private fun ClothingPickRowCard(
             hits.forEach { item ->
                 Card(onClick = { viewModel.selectRowItem(row.key, item) }, modifier = Modifier.fillMaxWidth()) {
                     Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        ClothingImage(null, item.photoUrl, item.description, Modifier.size(40.dp))
+                        ClothingImage(null, item.shownPhotoUrl(), item.description, Modifier.size(40.dp))
                         Spacer(Modifier.width(8.dp))
                         Text(item.description)
                     }
@@ -570,7 +578,7 @@ private fun MatchedSuggestionCard(
                 )
                 ClothingImage(
                     jpeg = null,
-                    url = item.photoUrl,
+                    url = item.shownPhotoUrl(),
                     description = item.description,
                     modifier = Modifier.size(96.dp),
                 )

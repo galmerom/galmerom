@@ -2,6 +2,7 @@ package com.galmerom.outfittracker.ui.meeting
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.galmerom.outfittracker.domain.BackgroundRemover
 import com.galmerom.outfittracker.domain.GarmentDetector
 import com.galmerom.outfittracker.domain.WardrobeDetection
 import com.galmerom.outfittracker.domain.logic.EntitySuggestions
@@ -116,6 +117,7 @@ class LogMeetingViewModel(
     private val meetings: MeetingRepository,
     private val categoriesRepo: CategoryRepository,
     private val detector: GarmentDetector,
+    private val remover: BackgroundRemover,
     private val editingMeetingId: String?,
 ) : ViewModel() {
     private val _state = MutableStateFlow(LogMeetingUiState())
@@ -282,6 +284,8 @@ class LogMeetingViewModel(
             return
         }
         viewModelScope.launch {
+            val prepared = photo?.let { remover.prepare(it) }
+            if (prepared != null && prepared.processed == null) report(UserMessage.CUTOUT_KEPT_ORIGINAL)
             clothing.upsert(
                 ClothingItem(
                     id = "",
@@ -289,8 +293,10 @@ class LogMeetingViewModel(
                     categoryId = categoryId,
                     photoUrl = null,
                     hidden = false,
+                    backgroundRemoved = prepared?.processed != null,
                 ),
-                photo,
+                photoJpeg = prepared?.processed ?: prepared?.original,
+                originalJpeg = if (prepared?.processed != null) prepared.original else null,
             ).fold(
                 onSuccess = { (item, outcome) ->
                     _state.update { it.copy(aiSelectedIds = it.aiSelectedIds + item.id).syncSelection() }

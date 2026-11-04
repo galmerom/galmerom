@@ -69,8 +69,11 @@ fun WardrobeScreen(onAdd: () -> Unit, onEdit: (String) -> Unit, onHidden: () -> 
     val container = LocalAppContainer.current
     val clothing = container.clothingRepository ?: return
     val categoriesRepo = container.categoryRepository ?: return
-    val viewModel: WardrobeViewModel = viewModel(factory = viewModelFactory { WardrobeViewModel(clothing) })
+    val viewModel: WardrobeViewModel = viewModel(
+        factory = viewModelFactory { WardrobeViewModel(clothing, container.backgroundRemover) },
+    )
     val items by viewModel.visible.collectAsStateWithLifecycle()
+    val improve by viewModel.improve.collectAsStateWithLifecycle()
     val categories by categoriesRepo.observeAll().collectAsStateWithLifecycle(emptyList())
     val snackbar = remember { SnackbarHostState() }
     val context = LocalContext.current
@@ -98,9 +101,34 @@ fun WardrobeScreen(onAdd: () -> Unit, onEdit: (String) -> Unit, onHidden: () -> 
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             item {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    TextButton(onClick = onHidden) {
-                        Text(stringResource(R.string.wardrobe_hidden))
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        if (improve.running) {
+                            Text(
+                                stringResource(R.string.improve_progress, improve.done, improve.total),
+                                style = MaterialTheme.typography.labelLarge,
+                            )
+                        } else {
+                            TextButton(onClick = viewModel::improvePhotos) {
+                                Text(stringResource(R.string.improve_photos), style = MaterialTheme.typography.labelLarge)
+                            }
+                        }
+                        TextButton(onClick = onHidden) {
+                            Text(stringResource(R.string.wardrobe_hidden))
+                        }
+                    }
+                    if (improve.running) {
+                        CircularProgressIndicator(Modifier.size(18.dp))
+                    }
+                    if (improve.finished) {
+                        Text(stringResource(R.string.improve_done, improve.updated))
+                    }
+                    if (improve.empty) {
+                        Text(stringResource(R.string.improve_none))
                     }
                 }
             }
@@ -134,7 +162,9 @@ fun HiddenItemsScreen(onBack: () -> Unit) {
     val container = LocalAppContainer.current
     val clothing = container.clothingRepository ?: return
     val categoriesRepo = container.categoryRepository ?: return
-    val viewModel: WardrobeViewModel = viewModel(factory = viewModelFactory { WardrobeViewModel(clothing) })
+    val viewModel: WardrobeViewModel = viewModel(
+        factory = viewModelFactory { WardrobeViewModel(clothing, container.backgroundRemover) },
+    )
     val categories by categoriesRepo.observeAll().collectAsStateWithLifecycle(emptyList())
     val items by viewModel.hidden.collectAsStateWithLifecycle()
     SecondaryPage(title = stringResource(R.string.wardrobe_hidden), onBack = onBack) { padding ->
@@ -167,7 +197,7 @@ fun HiddenItemsScreen(onBack: () -> Unit) {
                     ) {
                         ClothingImage(
                             jpeg = null,
-                            url = item.photoUrl,
+                            url = item.shownPhotoUrl(),
                             description = item.description,
                             modifier = Modifier.size(56.dp),
                         )
@@ -198,7 +228,7 @@ fun ClothingEditScreen(
     val viewModel: ClothingEditViewModel = viewModel(
         key = "$itemId:${initialCategoryId.orEmpty()}",
         factory = viewModelFactory {
-            ClothingEditViewModel(itemId, clothing, categoriesRepo, initialCategoryId)
+            ClothingEditViewModel(itemId, clothing, categoriesRepo, container.backgroundRemover, initialCategoryId)
         },
     )
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -235,12 +265,34 @@ fun ClothingEditScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            val shownUrl = when {
+                state.photoJpeg != null -> null
+                state.backgroundRemoved -> state.photoUrl
+                else -> state.originalPhotoUrl ?: state.photoUrl
+            }
             ClothingImage(
                 jpeg = state.photoJpeg,
-                url = state.photoUrl,
+                url = shownUrl,
                 description = stringResource(R.string.photo_description),
                 modifier = Modifier.fillMaxWidth().height(200.dp),
             )
+            if (state.preparingPhoto) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    CircularProgressIndicator(Modifier.size(18.dp))
+                    Text(stringResource(R.string.cutout_working))
+                }
+            }
+            val canToggle = (state.pendingNewPhoto && state.processedJpeg != null) ||
+                (!state.pendingNewPhoto && !state.originalPhotoUrl.isNullOrBlank())
+            if (canToggle) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        stringResource(if (state.backgroundRemoved) R.string.cutout_processed else R.string.cutout_original),
+                        modifier = Modifier.weight(1f),
+                    )
+                    Switch(checked = state.backgroundRemoved, onCheckedChange = viewModel::setBackgroundRemoved)
+                }
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = photos.onCamera) { Text(stringResource(R.string.clothing_camera)) }
                 OutlinedButton(onClick = photos.onGallery) { Text(stringResource(R.string.clothing_gallery)) }
@@ -272,13 +324,14 @@ fun ClothingEditScreen(
             }
             Button(
                 onClick = {
-                    if (state.photoJpeg == null && state.photoUrl.isNullOrBlank()) {
+                    val hasPhoto = state.photoJpeg != null || !state.photoUrl.isNullOrBlank() || !state.originalPhotoUrl.isNullOrBlank()
+                    if (!hasPhoto) {
                         confirmWithoutPhoto = true
                     } else {
                         viewModel.save()
                     }
                 },
-                enabled = !state.saving,
+                enabled = !state.saving && !state.preparingPhoto,
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 if (state.saving) {
@@ -324,7 +377,7 @@ private fun ClothingRow(item: ClothingItem, onClick: () -> Unit) {
         ) {
             ClothingImage(
                 jpeg = null,
-                url = item.photoUrl,
+                url = item.shownPhotoUrl(),
                 description = item.description,
                 modifier = Modifier.size(64.dp),
             )

@@ -2,6 +2,7 @@ package com.galmerom.outfittracker.ui.wardrobe
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.galmerom.outfittracker.domain.BackgroundRemover
 import com.galmerom.outfittracker.domain.logic.WardrobeRules
 import com.galmerom.outfittracker.domain.model.ClothingCategory
 import com.galmerom.outfittracker.domain.repository.CategoryRepository
@@ -21,8 +22,18 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+data class PhotoImproveState(
+    val running: Boolean = false,
+    val done: Int = 0,
+    val total: Int = 0,
+    val updated: Int = 0,
+    val finished: Boolean = false,
+    val empty: Boolean = false,
+)
+
 class WardrobeViewModel(
     private val clothing: ClothingRepository,
+    private val remover: BackgroundRemover,
 ) : ViewModel() {
     val items: StateFlow<List<ClothingItem>> = clothing.observeAll()
         .catch { report(it.toUserMessage()) }
@@ -38,6 +49,40 @@ class WardrobeViewModel(
 
     private val _messages = MutableSharedFlow<UserMessage>(extraBufferCapacity = 8)
     val messages = _messages.asSharedFlow()
+    private val _improve = MutableStateFlow(PhotoImproveState())
+    val improve: StateFlow<PhotoImproveState> = _improve
+
+    fun improvePhotos() {
+        if (_improve.value.running) return
+        val targets = items.value.filter { item ->
+            !item.hidden && !item.photoUrl.isNullOrBlank() && item.originalPhotoUrl.isNullOrBlank()
+        }
+        if (targets.isEmpty()) {
+            _improve.value = PhotoImproveState(empty = true)
+            return
+        }
+        viewModelScope.launch {
+            var updated = 0
+            targets.forEachIndexed { index, item ->
+                _improve.value = PhotoImproveState(
+                    running = true,
+                    done = index,
+                    total = targets.size,
+                    updated = updated,
+                )
+                val source = item.photoUrl ?: return@forEachIndexed
+                val bytes = clothing.downloadPhoto(source).getOrNull() ?: return@forEachIndexed
+                val processed = remover.prepare(bytes).processed ?: return@forEachIndexed
+                if (clothing.saveCutout(item.id, processed, source).isSuccess) updated++
+            }
+            _improve.value = PhotoImproveState(
+                done = targets.size,
+                total = targets.size,
+                updated = updated,
+                finished = true,
+            )
+        }
+    }
 
     fun setHidden(id: String, hidden: Boolean) {
         viewModelScope.launch {
@@ -57,7 +102,13 @@ data class ClothingEditUiState(
     val categories: List<ClothingCategory> = emptyList(),
     val hidden: Boolean = false,
     val photoUrl: String? = null,
+    val originalPhotoUrl: String? = null,
+    val backgroundRemoved: Boolean = false,
     val photoJpeg: ByteArray? = null,
+    val originalJpeg: ByteArray? = null,
+    val processedJpeg: ByteArray? = null,
+    val pendingNewPhoto: Boolean = false,
+    val preparingPhoto: Boolean = false,
     val saving: Boolean = false,
     val saved: Boolean = false,
     val savedItemId: String? = null,
@@ -67,6 +118,7 @@ class ClothingEditViewModel(
     private val itemId: String,
     private val clothing: ClothingRepository,
     categories: CategoryRepository,
+    private val remover: BackgroundRemover,
     private val initialCategoryId: String? = null,
 ) : ViewModel() {
     private val _state = MutableStateFlow(ClothingEditUiState(ready = itemId == NEW_ID))
@@ -101,6 +153,8 @@ class ClothingEditViewModel(
                                 categoryId = item.categoryId,
                                 hidden = item.hidden,
                                 photoUrl = item.photoUrl,
+                                originalPhotoUrl = item.originalPhotoUrl,
+                                backgroundRemoved = item.backgroundRemoved,
                             )
                         }
                     }
@@ -115,7 +169,34 @@ class ClothingEditViewModel(
 
     fun onHidden(value: Boolean) = _state.update { it.copy(hidden = value) }
 
-    fun onPhoto(jpeg: ByteArray) = _state.update { it.copy(photoJpeg = jpeg) }
+    fun onPhoto(jpeg: ByteArray) {
+        viewModelScope.launch {
+            _state.update { it.copy(preparingPhoto = true) }
+            val prepared = remover.prepare(jpeg)
+            _state.update {
+                it.copy(
+                    preparingPhoto = false,
+                    pendingNewPhoto = true,
+                    originalJpeg = prepared.original,
+                    processedJpeg = prepared.processed,
+                    photoJpeg = prepared.processed ?: prepared.original,
+                    backgroundRemoved = prepared.processed != null,
+                )
+            }
+            if (prepared.processed == null) _messages.emit(UserMessage.CUTOUT_KEPT_ORIGINAL)
+        }
+    }
+
+    fun setBackgroundRemoved(value: Boolean) {
+        val current = _state.value
+        if (current.pendingNewPhoto) {
+            val jpeg = if (value) current.processedJpeg else current.originalJpeg
+            if (jpeg == null) return
+            _state.update { it.copy(backgroundRemoved = value, photoJpeg = jpeg) }
+        } else if (!current.originalPhotoUrl.isNullOrBlank()) {
+            _state.update { it.copy(backgroundRemoved = value) }
+        }
+    }
 
     fun reportGeneric() {
         _messages.tryEmit(UserMessage.GENERIC)
@@ -134,6 +215,12 @@ class ClothingEditViewModel(
         viewModelScope.launch {
             _state.update { it.copy(saving = true) }
             val existingId = if (itemId == NEW_ID) "" else itemId
+            val displayJpeg = if (current.pendingNewPhoto) {
+                if (current.backgroundRemoved) current.processedJpeg else current.originalJpeg
+            } else {
+                null
+            }
+            val originalJpeg = if (current.pendingNewPhoto && current.backgroundRemoved) current.originalJpeg else null
             val result = clothing.upsert(
                 ClothingItem(
                     id = existingId,
@@ -141,8 +228,11 @@ class ClothingEditViewModel(
                     categoryId = current.categoryId,
                     photoUrl = current.photoUrl,
                     hidden = current.hidden,
+                    originalPhotoUrl = if (current.pendingNewPhoto) null else current.originalPhotoUrl,
+                    backgroundRemoved = if (current.pendingNewPhoto) false else current.backgroundRemoved,
                 ),
-                current.photoJpeg,
+                displayJpeg,
+                originalJpeg,
             )
             result.fold(
                 onSuccess = { (item, outcome) ->

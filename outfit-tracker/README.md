@@ -13,7 +13,7 @@ Each signed-in user has their own data under `users/{uid}/`:
 - **clothingItems** — `description`, `categoryId`, `photoUrl`, `hidden`
 - **meetings** — `date` (`YYYY-MM-DD`), `entityId`, `entityName`, `clothingItemIds`, optional `photoUrl`, `note`
 
-Photos are downscaled on the phone to about 1280px JPEG, then uploaded to Cloud Storage at `users/{uid}/…`. Sign-in is Firebase Auth with the user's Google account through Credential Manager, so the wardrobe survives replacing the phone. Firestore disk persistence is turned on and syncs when the network is back.
+Photos are downscaled on the phone to about 1280px JPEG, then uploaded to Cloud Storage at `users/{uid}/…`. A wardrobe item photo also gets a free on-device background removal (ML Kit Subject Segmentation). The original file stays beside the white-background version. Sign-in is Firebase Auth with the user's Google account through Credential Manager, so the wardrobe survives replacing the phone. Firestore disk persistence is turned on and syncs when the network is back.
 
 Garment detection goes through `GarmentDetector`. It sends the meeting photo and the existing wardrobe to Gemini (`gemini-3.8-flash`) and only suggests ids of items already in the wardrobe. Nothing is added until it is approved. The meeting photo is still saved with the meeting. A failed call shows a fixed Hebrew message. Debug builds install the App Check debug provider. Detection still fails until the Firebase project has Gemini credit.
 

@@ -120,6 +120,19 @@ class DomainLogicTest {
     }
 
     @Test
+    fun cutoutQuality_rejectsEmptyAndExtremeMasks() {
+        assertFalse(CutoutQuality.accept(null, 4))
+        assertFalse(CutoutQuality.accept(floatArrayOf(), 0))
+        assertFalse(CutoutQuality.accept(FloatArray(4) { 0f }, 4))
+        assertFalse(CutoutQuality.accept(FloatArray(4) { 1f }, 4))
+        val balanced = floatArrayOf(1f, 0f, 0f, 0f)
+        assertTrue(CutoutQuality.accept(balanced, 4))
+        val painted = CutoutQuality.applyWhiteBackground(intArrayOf(1, 2, 3, 4), balanced)
+        assertEquals(1, painted?.get(0))
+        assertEquals(0xFFFFFFFF.toInt(), painted?.get(1))
+    }
+
+    @Test
     fun majorGarment_keepsOnlyLargeTypesOnce() {
         assertEquals("jacket", MajorGarment.normalize("coat"))
         assertNull(MajorGarment.normalize("scarf"))

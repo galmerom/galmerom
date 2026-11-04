@@ -86,21 +86,54 @@ class FirestoreClothingRepository(
     override suspend fun upsert(
         item: ClothingItem,
         photoJpeg: ByteArray?,
+        originalJpeg: ByteArray?,
     ): Result<Pair<ClothingItem, SaveOutcome>> {
         val uid = auth.currentUser?.uid ?: return Result.failure(IllegalStateException("signed out"))
         val id = item.id.ifBlank { firestore.collection("users").document().id }
         var photoUrl = item.photoUrl
-        if (photoJpeg != null) {
+        var originalPhotoUrl = item.originalPhotoUrl
+        var backgroundRemoved = item.backgroundRemoved
+        if (photoJpeg != null && originalJpeg != null) {
+            val original = runCatching { photos.upload("users/$uid/clothing/$id-original.jpg", originalJpeg) }
+            originalPhotoUrl = original.getOrElse { return Result.failure(it) }
+            val processed = runCatching { photos.upload("users/$uid/clothing/$id.jpg", photoJpeg) }
+            photoUrl = processed.getOrElse { return Result.failure(it) }
+            backgroundRemoved = true
+        } else if (photoJpeg != null) {
             val uploaded = runCatching { photos.upload("users/$uid/clothing/$id.jpg", photoJpeg) }
             photoUrl = uploaded.getOrElse { return Result.failure(it) }
+            originalPhotoUrl = null
+            backgroundRemoved = false
         }
-        val saved = item.copy(id = id, description = item.description.trim(), photoUrl = photoUrl)
+        val saved = item.copy(
+            id = id,
+            description = item.description.trim(),
+            photoUrl = photoUrl,
+            originalPhotoUrl = originalPhotoUrl,
+            backgroundRemoved = backgroundRemoved,
+        )
         return firestore.userCollection(uid, CLOTHING)
             .document(id)
             .set(saved.toMap())
             .awaitCommitted()
             .map { saved to SaveOutcome.SAVED }
     }
+
+    override suspend fun saveCutout(id: String, processedJpeg: ByteArray, originalUrl: String): Result<Unit> {
+        val uid = auth.currentUser?.uid ?: return Result.failure(IllegalStateException("signed out"))
+        val processed = runCatching { photos.upload("users/$uid/clothing/$id-cutout.jpg", processedJpeg) }
+            .getOrElse { return Result.failure(it) }
+        return firestore.userCollection(uid, CLOTHING).document(id).update(
+            mapOf(
+                "photoUrl" to processed,
+                "originalPhotoUrl" to originalUrl,
+                "backgroundRemoved" to true,
+            ),
+        ).awaitCommitted()
+    }
+
+    override suspend fun downloadPhoto(url: String): Result<ByteArray> =
+        runCatching { photos.download(url) }
 
     override suspend fun setHidden(id: String, hidden: Boolean): Result<Unit> {
         val uid = auth.currentUser?.uid ?: return Result.failure(IllegalStateException("signed out"))
@@ -367,6 +400,8 @@ private fun ClothingItem.toMap(): Map<String, Any?> = mapOf(
     "description" to description,
     "categoryId" to categoryId,
     "photoUrl" to photoUrl,
+    "originalPhotoUrl" to originalPhotoUrl.orEmpty(),
+    "backgroundRemoved" to backgroundRemoved,
     "hidden" to hidden,
 )
 
@@ -380,6 +415,8 @@ private fun DocumentSnapshot.toClothingItem(): ClothingItem? {
         categoryId = categoryId,
         photoUrl = getString("photoUrl")?.takeIf { it.isNotBlank() },
         hidden = getBoolean("hidden") ?: false,
+        originalPhotoUrl = getString("originalPhotoUrl")?.takeIf { it.isNotBlank() },
+        backgroundRemoved = getBoolean("backgroundRemoved") ?: false,
     )
 }
 
