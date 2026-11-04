@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.android.application) apply false
     alias(libs.plugins.compose.compiler) apply false
+    alias(libs.plugins.google.services) apply false
 }
 
 // AGP's built-in Kotlin defaults to an older compiler. Keep it aligned with the

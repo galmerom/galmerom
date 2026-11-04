@@ -4,4 +4,97 @@
     <string name="hello">שלום</string>
     <!-- UI label for a person or forum. Rename this resource later; do not hard-code the label. -->
     <string name="entity_label">איש/פורום</string>
+    <!-- Optional override. Leave empty to use default_web_client_id from google-services.json. -->
+    <string name="web_client_id" translatable="false"></string>
+
+    <string name="nav_log_meeting">תיעוד מפגש</string>
+    <string name="nav_search">חיפוש</string>
+    <string name="nav_wardrobe">ארון</string>
+    <string name="back">חזרה</string>
+    <string name="sign_out">יציאה</string>
+    <string name="save">שמירה</string>
+    <string name="cancel">ביטול</string>
+    <string name="ok">אישור</string>
+    <string name="loading">טוען…</string>
+
+    <string name="setup_title">צריך להגדיר את Firebase</string>
+    <string name="setup_body">הקובץ google-services.json לא נמצא, אז אין חיבור ל-Firebase. צריך ליצור פרויקט, להוסיף אפליקציית Android עם החבילה com.galmerom.outfittracker, לשים את הקובץ בתיקיית app, ולבנות מחדש. השלבים המלאים כתובים ב-README.</string>
+    <string name="sign_in_body">כניסה עם חשבון Google שומרת את הנתונים גם אם מחליפים טלפון.</string>
+    <string name="sign_in_google">כניסה עם Google</string>
+    <string name="sign_in_missing_client">חסר מזהה לקוח מסוג Web. צריך להפעיל כניסה עם Google ב-Firebase, להוריד מחדש את google-services.json, או למלא את המשאב web_client_id.</string>
+    <string name="sign_in_failed">הכניסה נכשלה. נסי שוב.</string>
+
+    <string name="error_generic">משהו השתבש. נסי שוב.</string>
+    <string name="error_permission">אין הרשאה. צריך לפרוס את חוקי Firestore ו-Storage של המשתמשת.</string>
+    <string name="saved_without_photo">נשמר, אבל התמונה לא הועלתה. אפשר לנסות שוב כשיש רשת.</string>
+    <string name="camera_permission_denied">אין הרשאה למצלמה.</string>
+
+    <string name="category_shirt">חולצה</string>
+    <string name="category_pants">מכנסיים</string>
+    <string name="category_skirt">חצאית</string>
+    <string name="category_dress">שמלה</string>
+    <string name="category_jacket">ז׳קט</string>
+    <string name="category_shoes">נעליים</string>
+    <string name="category_accessory">אביזר</string>
+    <string name="category_other">אחר</string>
+    <string name="entity_type_person">אדם</string>
+    <string name="entity_type_forum">פורום</string>
+
+    <string name="wardrobe_empty">אין עדיין בגדים בארון.</string>
+    <string name="wardrobe_add">הוספת פריט</string>
+    <string name="wardrobe_hidden">פריטים מוסתרים</string>
+    <string name="wardrobe_hidden_empty">אין פריטים מוסתרים.</string>
+    <string name="clothing_new_title">פריט חדש</string>
+    <string name="clothing_edit_title">עריכת פריט</string>
+    <string name="clothing_description">תיאור</string>
+    <string name="clothing_category">קטגוריה</string>
+    <string name="clothing_hidden">הסתרה מהבחירה</string>
+    <string name="clothing_hidden_help">פריט מוסתר לא מופיע בבחירת בגדים למפגש, אבל נשאר בהיסטוריה.</string>
+    <string name="clothing_hidden_badge">מוסתר</string>
+    <string name="clothing_camera">מצלמה</string>
+    <string name="clothing_gallery">גלריה</string>
+    <string name="clothing_revive">שחזור</string>
+    <string name="clothing_saved">הפריט נשמר</string>
+    <string name="clothing_description_required">צריך תיאור.</string>
+    <string name="photo_description">תמונת הבגד</string>
+
+    <string name="log_date">תאריך</string>
+    <string name="log_pick_date">בחירת תאריך</string>
+    <string name="entity_search_label">חיפוש %1$s</string>
+    <string name="entity_create">יצירת %1$s חדש: %2$s</string>
+    <string name="entity_selected">נבחר: %1$s</string>
+    <string name="entity_clear">ניקוי בחירה</string>
+    <string name="entity_type">סוג</string>
+    <string name="clothes_section">בגדים</string>
+    <string name="clothes_empty_category">אין פריטים בקטגוריה הזו</string>
+    <string name="clothes_manual_add">הוספה ידנית לארון</string>
+    <string name="clothes_manual_title">פריט חדש לארון</string>
+    <string name="clothes_selected">נבחרו</string>
+    <string name="clothes_remove">הסרה מהמפגש</string>
+    <string name="clothes_none_selected">עדיין לא נבחרו בגדים.</string>
+    <string name="ai_section">זיהוי מתמונה</string>
+    <string name="ai_help">אפשר לצלם את התלבושת. אם הזיהוי נכשל, הבחירה הידנית נשארת פתוחה.</string>
+    <string name="ai_detect">זיהוי בגדים</string>
+    <string name="ai_detecting">מזהה בגדים…</string>
+    <string name="ai_failed">הזיהוי לא זמין כרגע. אפשר לבחור בגדים ידנית.</string>
+    <string name="ai_empty">לא זוהו בגדים. אפשר לבחור ידנית.</string>
+    <string name="ai_match">כבר בארון: %1$s</string>
+    <string name="ai_new">פריט חדש לארון</string>
+    <string name="ai_use">שימוש</string>
+    <string name="note_label">הערה</string>
+    <string name="meeting_photo">תמונת המפגש (לא חובה)</string>
+    <string name="meeting_photo_description">תמונת המפגש</string>
+    <string name="meeting_save">שמירת המפגש</string>
+    <string name="meeting_need_entity">צריך לבחור %1$s.</string>
+    <string name="meeting_need_clothes">צריך לבחור לפחות בגד אחד.</string>
+    <string name="meeting_saved">המפגש נשמר</string>
+
+    <string name="search_hint">חיפוש לפי %1$s</string>
+    <string name="show_more">הצג עוד</string>
+    <string name="search_empty">אין מפגשים להצגה.</string>
+    <string name="meeting_detail_title">פרטי מפגש</string>
+    <string name="meeting_clothes">הבגדים שנלבשו</string>
+    <string name="meeting_note">הערה</string>
+    <string name="meeting_missing">המפגש לא נמצא.</string>
+    <string name="clothing_missing">פריט שכבר לא קיים</string>
 </resources>

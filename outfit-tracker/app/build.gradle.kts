@@ -44,8 +44,34 @@ kotlin {
 dependencies {
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.tooling.preview)
+    implementation(libs.androidx.compose.material.icons)
     implementation(libs.androidx.compose.material3)
+    implementation(libs.androidx.lifecycle.runtime.compose)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.navigation.compose)
+    implementation(libs.androidx.credentials)
+    implementation(libs.androidx.credentials.play.services)
+    implementation(libs.androidx.exifinterface)
+    implementation(libs.google.id)
+    implementation(libs.coil.compose)
+    implementation(libs.coil.network)
+    implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.kotlinx.coroutines.play.services)
+
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.auth)
+    implementation(libs.firebase.firestore)
+    implementation(libs.firebase.storage)
+    implementation(libs.firebase.ai)
+
     debugImplementation(libs.androidx.compose.ui.tooling)
+    testImplementation(libs.junit)
+}
+
+// The developer adds this file locally. CI and a fresh checkout must still assemble.
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
 }
