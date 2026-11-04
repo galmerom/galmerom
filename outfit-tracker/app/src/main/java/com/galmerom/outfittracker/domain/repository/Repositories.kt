@@ -1,5 +1,6 @@
 package com.galmerom.outfittracker.domain.repository
 
+import com.galmerom.outfittracker.domain.model.ClothingCategory
 import com.galmerom.outfittracker.domain.model.ClothingItem
 import com.galmerom.outfittracker.domain.model.Entity
 import com.galmerom.outfittracker.domain.model.EntityType
@@ -29,6 +30,15 @@ interface ClothingRepository {
 interface EntityRepository {
     fun observeAll(): Flow<List<Entity>>
     suspend fun create(name: String, type: EntityType): Result<Entity>
+    suspend fun update(id: String, name: String, type: EntityType): Result<Unit>
+    suspend fun setHidden(id: String, hidden: Boolean): Result<Unit>
+    suspend fun setMembers(forumId: String, memberIds: List<String>): Result<Unit>
+}
+
+interface CategoryRepository {
+    fun observeAll(): Flow<List<ClothingCategory>>
+    suspend fun add(name: String): Result<ClothingCategory>
+    suspend fun rename(id: String, name: String): Result<Unit>
 }
 
 interface MeetingRepository {

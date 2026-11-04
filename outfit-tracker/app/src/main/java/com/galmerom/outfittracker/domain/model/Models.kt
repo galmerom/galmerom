@@ -2,22 +2,28 @@ package com.galmerom.outfittracker.domain.model
 
 import java.time.LocalDate
 
-enum class ClothingCategory {
-    SHIRT,
-    PANTS,
-    SKIRT,
-    DRESS,
-    JACKET,
-    SHOES,
-    ACCESSORY,
-    OTHER,
-    ;
+data class ClothingCategory(
+    val id: String,
+    val name: String,
+    val sortOrder: Int = 0,
+)
 
-    val wire: String get() = name.lowercase()
+object DefaultCategories {
+    val seeds: List<ClothingCategory> = listOf(
+        ClothingCategory("shirt", "חולצה", 0),
+        ClothingCategory("pants", "מכנסיים", 1),
+        ClothingCategory("skirt", "חצאית", 2),
+        ClothingCategory("dress", "שמלה", 3),
+        ClothingCategory("jacket", "ז׳קט", 4),
+        ClothingCategory("shoes", "נעליים", 5),
+        ClothingCategory("accessory", "אביזר", 6),
+        ClothingCategory("other", "אחר", 7),
+    )
 
-    companion object {
-        fun fromWire(value: String?): ClothingCategory? =
-            entries.firstOrNull { it.wire == value?.trim()?.lowercase() }
+    fun fromLegacy(value: String?): String? {
+        val wire = value?.trim()?.lowercase().orEmpty()
+        if (wire.isEmpty()) return null
+        return seeds.firstOrNull { it.id == wire }?.id
     }
 }
 
@@ -38,12 +44,14 @@ data class Entity(
     val id: String,
     val name: String,
     val type: EntityType,
+    val hidden: Boolean = false,
+    val memberIds: List<String> = emptyList(),
 )
 
 data class ClothingItem(
     val id: String,
     val description: String,
-    val category: ClothingCategory,
+    val categoryId: String,
     val photoUrl: String?,
     val hidden: Boolean,
 )
@@ -67,8 +75,13 @@ data class MeetingDraft(
 )
 
 data class DetectedGarment(
-    val category: ClothingCategory,
+    val categoryId: String,
     val description: String,
+)
+
+data class MeetingHit(
+    val meeting: Meeting,
+    val forumName: String? = null,
 )
 
 enum class ErrorKind {

@@ -1,21 +1,21 @@
 package com.galmerom.outfittracker.domain.logic
 
-import com.galmerom.outfittracker.domain.model.ClothingCategory
 import com.galmerom.outfittracker.domain.model.DetectedGarment
 
 object GarmentResponseParser {
-    fun parse(raw: String): List<DetectedGarment> {
+    fun parse(raw: String, allowedCategoryIds: Set<String>? = null): List<DetectedGarment> {
         val start = raw.indexOf('[')
         val end = raw.lastIndexOf(']')
         if (start < 0 || end <= start) return emptyList()
-        return splitObjects(raw.substring(start + 1, end)).mapNotNull(::parseObject)
+        return splitObjects(raw.substring(start + 1, end)).mapNotNull { parseObject(it, allowedCategoryIds) }
     }
 
-    private fun parseObject(objectText: String): DetectedGarment? {
+    private fun parseObject(objectText: String, allowedCategoryIds: Set<String>?): DetectedGarment? {
         val fields = stringFields(objectText)
-        val category = ClothingCategory.fromWire(fields["category"]) ?: return null
+        val category = fields["category"]?.trim().orEmpty()
         val description = fields["description"]?.trim().orEmpty()
-        if (description.isEmpty()) return null
+        if (category.isEmpty() || description.isEmpty()) return null
+        if (allowedCategoryIds != null && category !in allowedCategoryIds) return null
         return DetectedGarment(category, description)
     }
 

@@ -4,11 +4,30 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.outlined.DateRange
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.NavigationDrawerItem
+import androidx.compose.material3.rememberDrawerState
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.galmerom.outfittracker.data.FontSize
+import com.galmerom.outfittracker.ui.categories.CategoryListScreen
+import com.galmerom.outfittracker.ui.entities.EntityEditScreen
+import com.galmerom.outfittracker.ui.entities.EntityEditViewModel
+import com.galmerom.outfittracker.ui.entities.EntityListScreen
+import com.galmerom.outfittracker.ui.entities.HiddenEntitiesScreen
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -61,11 +80,16 @@ private object Routes {
     const val SEARCH = "search"
     const val WARDROBE = "wardrobe"
     const val HIDDEN = "wardrobe/hidden"
+    const val ENTITIES = "entities"
+    const val ENTITIES_HIDDEN = "entities/hidden"
+    const val ENTITY_EDIT = "entities/edit/{entityId}"
+    const val CATEGORIES = "categories"
     const val EDIT = "wardrobe/edit/{itemId}"
     const val DETAIL = "meeting/{meetingId}"
 
     fun edit(itemId: String) = "wardrobe/edit/$itemId"
     fun detail(meetingId: String) = "meeting/$meetingId"
+    fun entity(entityId: String) = "entities/edit/$entityId"
 }
 
 private sealed interface Gate {
@@ -95,12 +119,12 @@ private fun AuthGate(container: AppContainer) {
             value = if (user == null) Gate.SignedOut else Gate.SignedIn(user)
         }
     }
-    when (gate) {
+    when (val current = gate) {
         Gate.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
         }
         Gate.SignedOut -> SignedOutScreen(container)
-        is Gate.SignedIn -> AppScaffold()
+        is Gate.SignedIn -> AppScaffold(current.user)
     }
 }
 
@@ -128,13 +152,16 @@ private fun SignedOutScreen(container: AppContainer) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AppScaffold() {
+private fun AppScaffold(user: SignedInUser) {
     val container = LocalAppContainer.current
     val navController = rememberNavController()
     val backStack by navController.currentBackStackEntryAsState()
     val route = backStack?.destination?.route
     val topLevel = route == Routes.LOG || route == Routes.SEARCH || route == Routes.WARDROBE
     val scope = rememberCoroutineScope()
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
+    val fontSize by container.fontSettings.choice.collectAsStateWithLifecycle(FontSize.REGULAR)
+    val entityLabel = stringResource(R.string.entity_label)
     val barColors = NavigationBarItemDefaults.colors(
         selectedIconColor = MaterialTheme.colorScheme.primary,
         selectedTextColor = MaterialTheme.colorScheme.primary,
@@ -142,6 +169,44 @@ private fun AppScaffold() {
         unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
         unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
     )
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = {
+            ModalDrawerSheet {
+                Column(Modifier.padding(20.dp), verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        user.displayName?.takeIf { it.isNotBlank() } ?: stringResource(R.string.signed_in_unknown),
+                        style = MaterialTheme.typography.titleLarge,
+                    )
+                    Text(user.email.orEmpty(), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.height(8.dp))
+                    NavigationDrawerItem(
+                        label = { Text(stringResource(R.string.menu_entities, entityLabel)) },
+                        selected = route == Routes.ENTITIES,
+                        onClick = {
+                            scope.launch { drawerState.close() }
+                            navController.navigate(Routes.ENTITIES)
+                        },
+                    )
+                    NavigationDrawerItem(
+                        label = { Text(stringResource(R.string.menu_categories)) },
+                        selected = route == Routes.CATEGORIES,
+                        onClick = {
+                            scope.launch { drawerState.close() }
+                            navController.navigate(Routes.CATEGORIES)
+                        },
+                    )
+                    Text(stringResource(R.string.font_size), style = MaterialTheme.typography.titleSmall)
+                    RowFontSizes(fontSize) { size ->
+                        scope.launch { container.fontSettings.set(size) }
+                    }
+                    TextButton(onClick = { scope.launch { container.authRepository?.signOut() } }) {
+                        Text(stringResource(R.string.sign_out))
+                    }
+                }
+            }
+        },
+    ) {
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
@@ -151,16 +216,12 @@ private fun AppScaffold() {
                         containerColor = MaterialTheme.colorScheme.background,
                         titleContentColor = MaterialTheme.colorScheme.onBackground,
                     ),
-                    title = { Text(stringResource(R.string.app_name), style = MaterialTheme.typography.titleLarge) },
-                    actions = {
-                        TextButton(
-                            onClick = {
-                                scope.launch { container.authRepository?.signOut() }
-                            },
-                        ) {
-                            Text(stringResource(R.string.sign_out))
+                    navigationIcon = {
+                        IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                            Icon(Icons.Filled.Menu, contentDescription = stringResource(R.string.menu_open))
                         }
                     },
+                    title = { Text(stringResource(R.string.app_name), style = MaterialTheme.typography.titleLarge) },
                 )
             }
         },
@@ -233,7 +294,51 @@ private fun AppScaffold() {
                     onBack = { navController.popBackStack() },
                 )
             }
+            composable(Routes.ENTITIES) {
+                EntityListScreen(
+                    onAdd = { navController.navigate(Routes.entity(EntityEditViewModel.NEW)) },
+                    onEdit = { navController.navigate(Routes.entity(it)) },
+                    onHidden = { navController.navigate(Routes.ENTITIES_HIDDEN) },
+                )
+            }
+            composable(Routes.ENTITIES_HIDDEN) {
+                HiddenEntitiesScreen(onBack = { navController.popBackStack() })
+            }
+            composable(
+                route = Routes.ENTITY_EDIT,
+                arguments = listOf(navArgument("entityId") { type = NavType.StringType }),
+            ) { entry ->
+                EntityEditScreen(
+                    entityId = entry.arguments?.getString("entityId").orEmpty(),
+                    onBack = { navController.popBackStack() },
+                )
+            }
+            composable(Routes.CATEGORIES) {
+                CategoryListScreen(onBack = { navController.popBackStack() })
+            }
         }
+    }
+    }
+}
+
+@Composable
+private fun RowFontSizes(selected: FontSize, onSelect: (FontSize) -> Unit) {
+    Column(verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
+        FilterChip(
+            selected = selected == FontSize.REGULAR,
+            onClick = { onSelect(FontSize.REGULAR) },
+            label = { Text(stringResource(R.string.font_regular)) },
+        )
+        FilterChip(
+            selected = selected == FontSize.LARGE,
+            onClick = { onSelect(FontSize.LARGE) },
+            label = { Text(stringResource(R.string.font_large)) },
+        )
+        FilterChip(
+            selected = selected == FontSize.EXTRA_LARGE,
+            onClick = { onSelect(FontSize.EXTRA_LARGE) },
+            label = { Text(stringResource(R.string.font_extra_large)) },
+        )
     }
 }
 

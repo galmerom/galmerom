@@ -45,6 +45,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.galmerom.outfittracker.R
 import com.galmerom.outfittracker.ui.LocalAppContainer
+import com.galmerom.outfittracker.ui.common.ClearTextButton
 import com.galmerom.outfittracker.ui.common.ClothingImage
 import com.galmerom.outfittracker.ui.common.EmptyState
 import com.galmerom.outfittracker.ui.common.SectionTitle
@@ -58,8 +59,12 @@ import com.galmerom.outfittracker.ui.viewModelFactory
 
 @Composable
 fun SearchScreen(onOpenMeeting: (String) -> Unit) {
-    val meetings = LocalAppContainer.current.meetingRepository ?: return
-    val viewModel: SearchViewModel = viewModel(factory = viewModelFactory { SearchViewModel(meetings) })
+    val container = LocalAppContainer.current
+    val meetings = container.meetingRepository ?: return
+    val entities = container.entityRepository ?: return
+    val categoriesRepo = container.categoryRepository ?: return
+    val viewModel: SearchViewModel = viewModel(factory = viewModelFactory { SearchViewModel(meetings, entities) })
+    val categories by categoriesRepo.observeAll().collectAsStateWithLifecycle(emptyList())
     val state by viewModel.state.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     val context = LocalContext.current
@@ -81,6 +86,9 @@ fun SearchScreen(onOpenMeeting: (String) -> Unit) {
                     colors = appTextFieldColors(),
                     shape = MaterialTheme.shapes.extraSmall,
                     modifier = Modifier.fillMaxWidth(),
+                    trailingIcon = {
+                        ClearTextButton(state.query.isNotEmpty()) { viewModel.onQuery("") }
+                    },
                 )
             }
             if (state.visible.isEmpty()) {
@@ -94,7 +102,8 @@ fun SearchScreen(onOpenMeeting: (String) -> Unit) {
                     }
                 }
             }
-            items(state.visible, key = { it.id }) { meeting ->
+            items(state.visible, key = { it.meeting.id }) { hit ->
+                val meeting = hit.meeting
                 Card(
                     onClick = { onOpenMeeting(meeting.id) },
                     modifier = Modifier.fillMaxWidth(),
@@ -105,6 +114,13 @@ fun SearchScreen(onOpenMeeting: (String) -> Unit) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(meeting.date.toHebrewDate(), style = MaterialTheme.typography.titleMedium)
                         Text(meeting.entityName, color = MaterialTheme.colorScheme.primary)
+                        hit.forumName?.let { forum ->
+                            Text(
+                                stringResource(R.string.forum_meeting_badge, forum),
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
                         if (meeting.note.isNotBlank()) {
                             Text(
                                 meeting.note,
@@ -134,6 +150,8 @@ fun MeetingDetailScreen(meetingId: String, onBack: () -> Unit) {
     val container = LocalAppContainer.current
     val meetings = container.meetingRepository ?: return
     val clothing = container.clothingRepository ?: return
+    val categoriesRepo = container.categoryRepository ?: return
+    val categories by categoriesRepo.observeAll().collectAsStateWithLifecycle(emptyList())
     val viewModel: MeetingDetailViewModel = viewModel(
         key = meetingId,
         factory = viewModelFactory { MeetingDetailViewModel(meetingId, meetings, clothing) },
@@ -235,7 +253,7 @@ fun MeetingDetailScreen(meetingId: String, onBack: () -> Unit) {
                             Column {
                                 Text(item.description, style = MaterialTheme.typography.titleMedium)
                                 Text(
-                                    stringResource(item.category.labelRes()),
+                                    categories.firstOrNull { it.id == item.categoryId }?.name ?: item.categoryId,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                                 if (item.hidden) {

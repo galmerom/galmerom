@@ -53,8 +53,9 @@ import com.galmerom.outfittracker.domain.model.ClothingCategory
 import com.galmerom.outfittracker.domain.model.EntityType
 import com.galmerom.outfittracker.ui.LocalAppContainer
 import com.galmerom.outfittracker.ui.common.CategoryDropdown
-import com.galmerom.outfittracker.ui.common.ClothingCategoryMenu
+import com.galmerom.outfittracker.ui.common.ClearTextButton
 import com.galmerom.outfittracker.ui.common.ClothingImage
+import com.galmerom.outfittracker.ui.common.ClothingItemMenu
 import com.galmerom.outfittracker.ui.common.SectionTitle
 import com.galmerom.outfittracker.ui.common.appCardColors
 import com.galmerom.outfittracker.ui.common.appCardElevation
@@ -73,9 +74,10 @@ fun LogMeetingScreen() {
     val clothing = container.clothingRepository ?: return
     val entities = container.entityRepository ?: return
     val meetings = container.meetingRepository ?: return
+    val categoriesRepo = container.categoryRepository ?: return
     val detector = container.detector ?: return
     val viewModel: LogMeetingViewModel = viewModel(
-        factory = viewModelFactory { LogMeetingViewModel(clothing, entities, meetings, detector) },
+        factory = viewModelFactory { LogMeetingViewModel(clothing, entities, meetings, categoriesRepo, detector) },
     )
     val state by viewModel.state.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
@@ -124,6 +126,9 @@ fun LogMeetingScreen() {
                 colors = appTextFieldColors(),
                 shape = MaterialTheme.shapes.extraSmall,
                 modifier = Modifier.fillMaxWidth(),
+                trailingIcon = {
+                    ClearTextButton(state.entityQuery.isNotEmpty()) { viewModel.onQuery("") }
+                },
             )
             state.selectedEntity?.let { selected ->
                 Text(
@@ -172,13 +177,52 @@ fun LogMeetingScreen() {
                 }
             }
 
+            SectionTitle(stringResource(R.string.ai_section))
+            Text(
+                stringResource(R.string.ai_help),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            DetectionBlock(
+                jpeg = state.detectionPhoto,
+                detecting = state.detecting,
+                onPhoto = viewModel::onDetectionPhoto,
+                onDetect = viewModel::detect,
+                onDenied = { viewModel.notify(UserMessage.CAMERA_PERMISSION) },
+                onFailure = { viewModel.notify(UserMessage.GENERIC) },
+            )
+            state.aiSuggestions.forEachIndexed { index, suggestion ->
+                val categoryName = state.categories.firstOrNull { it.id == suggestion.garment.categoryId }?.name
+                    ?: suggestion.garment.categoryId
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.medium,
+                    colors = appCardColors(),
+                    elevation = appCardElevation(),
+                ) {
+                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(suggestion.garment.description)
+                        Text(categoryName, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        val match = suggestion.match
+                        Text(
+                            if (match != null) {
+                                stringResource(R.string.ai_match, match.description)
+                            } else {
+                                stringResource(R.string.ai_new)
+                            },
+                        )
+                        TextButton(onClick = { viewModel.acceptSuggestion(index) }) {
+                            Text(stringResource(R.string.ai_use))
+                        }
+                    }
+                }
+            }
+
             SectionTitle(stringResource(R.string.clothes_section))
-            ClothingCategory.entries.forEach { category ->
-                ClothingCategoryMenu(
-                    category = category,
-                    items = state.selectable.filter { it.category == category },
-                    onPick = viewModel::toggleClothing,
-                )
+            state.rows.forEach { row ->
+                ClothingPickRowCard(state = state, row = row, viewModel = viewModel)
+            }
+            OutlinedButton(onClick = viewModel::addClothingRow, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.clothes_add_row))
             }
             Text(stringResource(R.string.clothes_selected), style = MaterialTheme.typography.titleSmall)
             val selected = state.wardrobe.filter { it.id in state.selectedClothingIds }
@@ -200,44 +244,6 @@ fun LogMeetingScreen() {
             }
             TextButton(onClick = { showManual = true }) {
                 Text(stringResource(R.string.clothes_manual_add))
-            }
-
-            SectionTitle(stringResource(R.string.ai_section))
-            Text(
-                stringResource(R.string.ai_help),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            DetectionBlock(
-                jpeg = state.detectionPhoto,
-                detecting = state.detecting,
-                onPhoto = viewModel::onDetectionPhoto,
-                onDetect = viewModel::detect,
-                onDenied = { viewModel.notify(UserMessage.CAMERA_PERMISSION) },
-                onFailure = { viewModel.notify(UserMessage.GENERIC) },
-            )
-            state.aiSuggestions.forEachIndexed { index, suggestion ->
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = MaterialTheme.shapes.medium,
-                    colors = appCardColors(),
-                    elevation = appCardElevation(),
-                ) {
-                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(suggestion.garment.description)
-                        Text(stringResource(suggestion.garment.category.labelRes()))
-                        val match = suggestion.match
-                        Text(
-                            if (match != null) {
-                                stringResource(R.string.ai_match, match.description)
-                            } else {
-                                stringResource(R.string.ai_new)
-                            },
-                        )
-                        TextButton(onClick = { viewModel.acceptSuggestion(index) }) {
-                            Text(stringResource(R.string.ai_use))
-                        }
-                    }
-                }
             }
 
             OutlinedTextField(
@@ -292,14 +298,72 @@ fun LogMeetingScreen() {
 
     if (showManual) {
         ManualItemDialog(
+            categories = state.categories,
             onDismiss = { showManual = false },
             onDenied = { viewModel.notify(UserMessage.CAMERA_PERMISSION) },
             onFailure = { viewModel.notify(UserMessage.GENERIC) },
-            onSave = { description, category, jpeg ->
-                viewModel.addManual(description, category, jpeg)
+            onSave = { description, categoryId, jpeg ->
+                viewModel.addManual(description, categoryId, jpeg)
                 showManual = false
             },
         )
+    }
+}
+
+@Composable
+private fun ClothingPickRowCard(
+    state: LogMeetingUiState,
+    row: ClothingPickRow,
+    viewModel: LogMeetingViewModel,
+) {
+    val inCategory = state.selectable.filter { row.categoryId.isBlank() || it.categoryId == row.categoryId }
+    val hits = if (row.query.isBlank()) {
+        emptyList()
+    } else {
+        inCategory.filter { it.description.contains(row.query.trim(), ignoreCase = true) }
+    }
+    val chosen = state.wardrobe.firstOrNull { it.id == row.itemId }
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        colors = appCardColors(),
+        elevation = appCardElevation(),
+    ) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            CategoryDropdown(
+                categories = state.categories,
+                categoryId = row.categoryId,
+                onCategory = { viewModel.onRowCategory(row.key, it) },
+            )
+            ClothingItemMenu(
+                label = chosen?.description ?: stringResource(R.string.clothes_pick_item),
+                items = inCategory,
+                onPick = { viewModel.selectRowItem(row.key, it) },
+            )
+            OutlinedTextField(
+                value = row.query,
+                onValueChange = { viewModel.onRowQuery(row.key, it) },
+                label = { Text(stringResource(R.string.clothes_search)) },
+                colors = appTextFieldColors(),
+                shape = MaterialTheme.shapes.extraSmall,
+                modifier = Modifier.fillMaxWidth(),
+                trailingIcon = {
+                    ClearTextButton(row.query.isNotEmpty()) { viewModel.onRowQuery(row.key, "") }
+                },
+            )
+            hits.forEach { item ->
+                Card(onClick = { viewModel.selectRowItem(row.key, item) }, modifier = Modifier.fillMaxWidth()) {
+                    Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        ClothingImage(null, item.photoUrl, item.description, Modifier.size(40.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(item.description)
+                    }
+                }
+            }
+            TextButton(onClick = { viewModel.removeClothingRow(row.key) }) {
+                Text(stringResource(R.string.remove_row))
+            }
+        }
     }
 }
 
@@ -356,10 +420,11 @@ private fun ManualItemDialog(
     onDismiss: () -> Unit,
     onDenied: () -> Unit,
     onFailure: () -> Unit,
-    onSave: (String, ClothingCategory, ByteArray?) -> Unit,
+    categories: List<com.galmerom.outfittracker.domain.model.ClothingCategory>,
+    onSave: (String, String, ByteArray?) -> Unit,
 ) {
     var description by remember { mutableStateOf("") }
-    var category by remember { mutableStateOf(ClothingCategory.SHIRT) }
+    var categoryId by remember(categories) { mutableStateOf(categories.firstOrNull()?.id.orEmpty()) }
     var photo by remember { mutableStateOf<ByteArray?>(null) }
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -373,7 +438,11 @@ private fun ManualItemDialog(
                     colors = appTextFieldColors(),
                     shape = MaterialTheme.shapes.extraSmall,
                 )
-                CategoryDropdown(category = category, onCategory = { category = it })
+                CategoryDropdown(
+                    categories = categories,
+                    categoryId = categoryId,
+                    onCategory = { categoryId = it },
+                )
                 PhotoBlock(
                     jpeg = photo,
                     description = stringResource(R.string.photo_description),
@@ -384,7 +453,7 @@ private fun ManualItemDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = { onSave(description, category, photo) }) {
+            TextButton(onClick = { onSave(description, categoryId, photo) }) {
                 Text(stringResource(R.string.save))
             }
         },

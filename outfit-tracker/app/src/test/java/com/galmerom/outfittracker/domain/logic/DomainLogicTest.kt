@@ -1,6 +1,5 @@
 package com.galmerom.outfittracker.domain.logic
 
-import com.galmerom.outfittracker.domain.model.ClothingCategory
 import com.galmerom.outfittracker.domain.model.ClothingItem
 import com.galmerom.outfittracker.domain.model.DetectedGarment
 import com.galmerom.outfittracker.domain.model.Entity
@@ -74,21 +73,21 @@ class DomainLogicTest {
 
     @Test
     fun wardrobeRules_hideFromSelection_andMatchDetection() {
-        val visible = item("1", "חולצה לבנה", ClothingCategory.SHIRT, hidden = false)
-        val hidden = item("2", "חולצה שחורה", ClothingCategory.SHIRT, hidden = true)
-        val pants = item("3", "מכנסיים כהים", ClothingCategory.PANTS, hidden = false)
+        val visible = item("1", "חולצה לבנה", "shirt", hidden = false)
+        val hidden = item("2", "חולצה שחורה", "shirt", hidden = true)
+        val pants = item("3", "מכנסיים כהים", "pants", hidden = false)
         val items = listOf(visible, hidden, pants)
 
         assertEquals(listOf("1", "3"), WardrobeRules.selectable(items).map { it.id })
         assertEquals(
             "1",
-            WardrobeRules.match(DetectedGarment(ClothingCategory.SHIRT, "חולצה לבנה"), items)?.id,
+            WardrobeRules.match(DetectedGarment("shirt", "חולצה לבנה"), items)?.id,
         )
         assertEquals(
             "3",
-            WardrobeRules.match(DetectedGarment(ClothingCategory.PANTS, "מכנסיים"), items)?.id,
+            WardrobeRules.match(DetectedGarment("pants", "מכנסיים"), items)?.id,
         )
-        assertNull(WardrobeRules.match(DetectedGarment(ClothingCategory.SHIRT, "חולצה שחורה"), items))
+        assertNull(WardrobeRules.match(DetectedGarment("shirt", "חולצה שחורה"), items))
     }
 
     @Test
@@ -103,8 +102,8 @@ class DomainLogicTest {
             ]
             ```
         """.trimIndent()
-        val parsed = GarmentResponseParser.parse(raw)
-        assertEquals(listOf(DetectedGarment(ClothingCategory.SHIRT, "חולצה לבנה")), parsed)
+        val parsed = GarmentResponseParser.parse(raw, setOf("shirt", "pants", "shoes"))
+        assertEquals(listOf(DetectedGarment("shirt", "חולצה לבנה")), parsed)
         assertTrue(GarmentResponseParser.parse("no json").isEmpty())
     }
 
@@ -137,6 +136,34 @@ class DomainLogicTest {
         note = "",
     )
 
-    private fun item(id: String, description: String, category: ClothingCategory, hidden: Boolean) =
-        ClothingItem(id, description, category, photoUrl = null, hidden = hidden)
+    private fun item(id: String, description: String, categoryId: String, hidden: Boolean) =
+        ClothingItem(id, description, categoryId, photoUrl = null, hidden = hidden)
+
+    @Test
+    fun entityPicker_ordersByMeetingFrequencyThenName() {
+        val entities = listOf(
+            Entity("1", "דנה", EntityType.PERSON),
+            Entity("2", "מיכל", EntityType.PERSON),
+            Entity("3", "אורח", EntityType.PERSON, hidden = true),
+        )
+        val ordered = EntitySuggestions.forPicker("", entities, mapOf("2" to 4, "1" to 1))
+        assertEquals(listOf("2", "1"), ordered.map { it.id })
+    }
+
+    @Test
+    fun meetingSearch_includesForumMeetingsForAMember() {
+        val dana = Entity("p1", "דנה", EntityType.PERSON)
+        val forum = Entity("f1", "פורום בוקר", EntityType.FORUM, memberIds = listOf("p1"))
+        val meetings = listOf(
+            meeting("own", LocalDate.of(2026, 1, 1), "דנה").copy(entityId = "p1"),
+            meeting("group", LocalDate.of(2026, 2, 1), "פורום בוקר").copy(entityId = "f1"),
+            meeting("other", LocalDate.of(2026, 3, 1), "מיכל").copy(entityId = "p2"),
+        )
+        val hits = MeetingSearch.search(meetings, listOf(dana, forum), "דנה")
+        assertEquals(listOf("group", "own"), hits.map { it.meeting.id })
+        assertEquals("פורום בוקר", hits.first().forumName)
+        val forumHits = MeetingSearch.search(meetings, listOf(dana, forum), "בוקר")
+        assertEquals(listOf("group"), forumHits.map { it.meeting.id })
+        assertNull(forumHits.first().forumName)
+    }
 }

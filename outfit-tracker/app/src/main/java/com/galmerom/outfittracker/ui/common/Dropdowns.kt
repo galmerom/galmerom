@@ -9,6 +9,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -23,23 +24,24 @@ import androidx.compose.ui.unit.dp
 import com.galmerom.outfittracker.R
 import com.galmerom.outfittracker.domain.model.ClothingCategory
 import com.galmerom.outfittracker.domain.model.ClothingItem
-import androidx.compose.material3.MaterialTheme
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CategoryDropdown(
-    category: ClothingCategory,
-    onCategory: (ClothingCategory) -> Unit,
+    categories: List<ClothingCategory>,
+    categoryId: String,
+    onCategory: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var expanded by remember { mutableStateOf(false) }
+    val selected = categories.firstOrNull { it.id == categoryId }
     ExposedDropdownMenuBox(
         expanded = expanded,
         onExpandedChange = { expanded = it },
         modifier = modifier,
     ) {
         OutlinedTextField(
-            value = stringResource(category.labelRes()),
+            value = selected?.name.orEmpty(),
             onValueChange = {},
             readOnly = true,
             label = { Text(stringResource(R.string.clothing_category)) },
@@ -50,12 +52,12 @@ fun CategoryDropdown(
                 .fillMaxWidth(),
         )
         ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            ClothingCategory.entries.forEach { option ->
+            categories.forEach { option ->
                 DropdownMenuItem(
-                    text = { Text(stringResource(option.labelRes())) },
+                    text = { Text(option.name) },
                     onClick = {
                         expanded = false
-                        onCategory(option)
+                        onCategory(option.id)
                     },
                 )
             }
@@ -65,23 +67,23 @@ fun CategoryDropdown(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ClothingCategoryMenu(
-    category: ClothingCategory,
+fun ClothingItemMenu(
+    label: String,
     items: List<ClothingItem>,
     onPick: (ClothingItem) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var expanded by remember(category) { mutableStateOf(false) }
+    var expanded by remember { mutableStateOf(false) }
     ExposedDropdownMenuBox(
         expanded = expanded,
         onExpandedChange = { expanded = it },
         modifier = modifier,
     ) {
         OutlinedTextField(
-            value = stringResource(category.labelRes()),
+            value = label,
             onValueChange = {},
             readOnly = true,
-            label = { Text(stringResource(R.string.clothes_section)) },
+            label = { Text(stringResource(R.string.clothes_pick_item)) },
             colors = appTextFieldColors(),
             shape = MaterialTheme.shapes.extraSmall,
             modifier = Modifier

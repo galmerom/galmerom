@@ -6,8 +6,12 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.graphics.toArgb
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.galmerom.outfittracker.data.FontSize
 import com.galmerom.outfittracker.ui.LocalAppContainer
+import com.galmerom.outfittracker.ui.LocalFontScale
 import com.galmerom.outfittracker.ui.navigation.OutfitTrackerRoot
 import com.galmerom.outfittracker.ui.theme.CardWhite
 import com.galmerom.outfittracker.ui.theme.Cream
@@ -24,7 +28,11 @@ class MainActivity : ComponentActivity() {
         )
         val container = (application as OutfitTrackerApplication).container
         setContent {
-            CompositionLocalProvider(LocalAppContainer provides container) {
+            val fontSize by container.fontSettings.choice.collectAsStateWithLifecycle(FontSize.REGULAR)
+            CompositionLocalProvider(
+                LocalAppContainer provides container,
+                LocalFontScale provides fontSize.scale,
+            ) {
                 OutfitTrackerTheme {
                     OutfitTrackerRoot()
                 }

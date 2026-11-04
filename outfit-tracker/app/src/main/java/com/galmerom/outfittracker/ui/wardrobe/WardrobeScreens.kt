@@ -47,7 +47,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.galmerom.outfittracker.R
-import com.galmerom.outfittracker.domain.model.ClothingCategory
 import com.galmerom.outfittracker.domain.model.ClothingItem
 import com.galmerom.outfittracker.ui.LocalAppContainer
 import com.galmerom.outfittracker.ui.common.CategoryDropdown
@@ -64,9 +63,12 @@ import com.galmerom.outfittracker.ui.viewModelFactory
 
 @Composable
 fun WardrobeScreen(onAdd: () -> Unit, onEdit: (String) -> Unit, onHidden: () -> Unit) {
-    val clothing = LocalAppContainer.current.clothingRepository ?: return
+    val container = LocalAppContainer.current
+    val clothing = container.clothingRepository ?: return
+    val categoriesRepo = container.categoryRepository ?: return
     val viewModel: WardrobeViewModel = viewModel(factory = viewModelFactory { WardrobeViewModel(clothing) })
     val items by viewModel.visible.collectAsStateWithLifecycle()
+    val categories by categoriesRepo.observeAll().collectAsStateWithLifecycle(emptyList())
     val snackbar = remember { SnackbarHostState() }
     val context = LocalContext.current
     LaunchedEffect(viewModel) {
@@ -108,11 +110,11 @@ fun WardrobeScreen(onAdd: () -> Unit, onEdit: (String) -> Unit, onHidden: () -> 
                     }
                 }
             }
-            ClothingCategory.entries.forEach { category ->
-                val group = items.filter { it.category == category }
+            categories.forEach { category ->
+                val group = items.filter { it.categoryId == category.id }
                 if (group.isEmpty()) return@forEach
-                item(key = "header-$category") {
-                    SectionTitle(stringResource(category.labelRes()))
+                item(key = "header-${category.id}") {
+                    SectionTitle(category.name)
                 }
                 items(group, key = { it.id }) { clothingItem ->
                     ClothingRow(clothingItem, onClick = { onEdit(clothingItem.id) })
@@ -124,8 +126,11 @@ fun WardrobeScreen(onAdd: () -> Unit, onEdit: (String) -> Unit, onHidden: () -> 
 
 @Composable
 fun HiddenItemsScreen(onBack: () -> Unit) {
-    val clothing = LocalAppContainer.current.clothingRepository ?: return
+    val container = LocalAppContainer.current
+    val clothing = container.clothingRepository ?: return
+    val categoriesRepo = container.categoryRepository ?: return
     val viewModel: WardrobeViewModel = viewModel(factory = viewModelFactory { WardrobeViewModel(clothing) })
+    val categories by categoriesRepo.observeAll().collectAsStateWithLifecycle(emptyList())
     val items by viewModel.hidden.collectAsStateWithLifecycle()
     SecondaryPage(title = stringResource(R.string.wardrobe_hidden), onBack = onBack) { padding ->
         LazyColumn(
@@ -164,7 +169,7 @@ fun HiddenItemsScreen(onBack: () -> Unit) {
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
                             Text(item.description, style = MaterialTheme.typography.titleMedium)
-                            Text(stringResource(item.category.labelRes()))
+                            Text(categories.firstOrNull { it.id == item.categoryId }?.name ?: item.categoryId)
                         }
                         TextButton(onClick = { viewModel.setHidden(item.id, false) }) {
                             Text(stringResource(R.string.clothing_revive))
@@ -178,10 +183,12 @@ fun HiddenItemsScreen(onBack: () -> Unit) {
 
 @Composable
 fun ClothingEditScreen(itemId: String, onBack: () -> Unit) {
-    val clothing = LocalAppContainer.current.clothingRepository ?: return
+    val container = LocalAppContainer.current
+    val clothing = container.clothingRepository ?: return
+    val categoriesRepo = container.categoryRepository ?: return
     val viewModel: ClothingEditViewModel = viewModel(
         key = itemId,
-        factory = viewModelFactory { ClothingEditViewModel(itemId, clothing) },
+        factory = viewModelFactory { ClothingEditViewModel(itemId, clothing, categoriesRepo) },
     )
     val state by viewModel.state.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
@@ -235,7 +242,8 @@ fun ClothingEditScreen(itemId: String, onBack: () -> Unit) {
                 modifier = Modifier.fillMaxWidth(),
             )
             CategoryDropdown(
-                category = state.category,
+                categories = state.categories,
+                categoryId = state.categoryId,
                 onCategory = viewModel::onCategory,
                 modifier = Modifier.fillMaxWidth(),
             )

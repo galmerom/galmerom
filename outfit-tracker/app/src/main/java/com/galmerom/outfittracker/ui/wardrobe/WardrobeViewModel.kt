@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.galmerom.outfittracker.domain.logic.WardrobeRules
 import com.galmerom.outfittracker.domain.model.ClothingCategory
+import com.galmerom.outfittracker.domain.repository.CategoryRepository
 import com.galmerom.outfittracker.domain.model.ClothingItem
 import com.galmerom.outfittracker.domain.model.SaveOutcome
 import com.galmerom.outfittracker.domain.repository.ClothingRepository
@@ -52,7 +53,8 @@ class WardrobeViewModel(
 data class ClothingEditUiState(
     val ready: Boolean = false,
     val description: String = "",
-    val category: ClothingCategory = ClothingCategory.SHIRT,
+    val categoryId: String = "",
+    val categories: List<ClothingCategory> = emptyList(),
     val hidden: Boolean = false,
     val photoUrl: String? = null,
     val photoJpeg: ByteArray? = null,
@@ -63,6 +65,7 @@ data class ClothingEditUiState(
 class ClothingEditViewModel(
     private val itemId: String,
     private val clothing: ClothingRepository,
+    categories: CategoryRepository,
 ) : ViewModel() {
     private val _state = MutableStateFlow(ClothingEditUiState(ready = itemId == NEW_ID))
     val state: StateFlow<ClothingEditUiState> = _state
@@ -73,6 +76,16 @@ class ClothingEditViewModel(
     private var loaded = itemId == NEW_ID
 
     init {
+        viewModelScope.launch {
+            categories.observeAll().catch { _messages.emit(it.toUserMessage()) }.collect { list ->
+                _state.update { state ->
+                    state.copy(
+                        categories = list,
+                        categoryId = state.categoryId.ifBlank { list.firstOrNull()?.id.orEmpty() },
+                    )
+                }
+            }
+        }
         if (itemId != NEW_ID) {
             viewModelScope.launch {
                 clothing.observeAll().catch { _messages.emit(it.toUserMessage()) }.collect { items ->
@@ -83,7 +96,7 @@ class ClothingEditViewModel(
                             it.copy(
                                 ready = true,
                                 description = item.description,
-                                category = item.category,
+                                categoryId = item.categoryId,
                                 hidden = item.hidden,
                                 photoUrl = item.photoUrl,
                             )
@@ -96,7 +109,7 @@ class ClothingEditViewModel(
 
     fun onDescription(value: String) = _state.update { it.copy(description = value) }
 
-    fun onCategory(value: ClothingCategory) = _state.update { it.copy(category = value) }
+    fun onCategory(value: String) = _state.update { it.copy(categoryId = value) }
 
     fun onHidden(value: Boolean) = _state.update { it.copy(hidden = value) }
 
@@ -123,7 +136,7 @@ class ClothingEditViewModel(
                 ClothingItem(
                     id = existingId,
                     description = current.description,
-                    category = current.category,
+                    categoryId = current.categoryId,
                     photoUrl = current.photoUrl,
                     hidden = current.hidden,
                 ),

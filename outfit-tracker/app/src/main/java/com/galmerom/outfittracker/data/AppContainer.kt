@@ -3,12 +3,14 @@ package com.galmerom.outfittracker.data
 import android.content.Context
 import com.galmerom.outfittracker.data.ai.FirebaseAiGarmentDetector
 import com.galmerom.outfittracker.data.auth.FirebaseAuthRepository
+import com.galmerom.outfittracker.data.firestore.FirestoreCategoryRepository
 import com.galmerom.outfittracker.data.firestore.FirestoreClothingRepository
 import com.galmerom.outfittracker.data.firestore.FirestoreEntityRepository
 import com.galmerom.outfittracker.data.firestore.FirestoreMeetingRepository
 import com.galmerom.outfittracker.data.photo.FirebasePhotoStorage
 import com.galmerom.outfittracker.domain.GarmentDetector
 import com.galmerom.outfittracker.domain.repository.AuthRepository
+import com.galmerom.outfittracker.domain.repository.CategoryRepository
 import com.galmerom.outfittracker.domain.repository.ClothingRepository
 import com.galmerom.outfittracker.domain.repository.EntityRepository
 import com.galmerom.outfittracker.domain.repository.MeetingRepository
@@ -32,16 +34,20 @@ class AppContainer(context: Context) {
     val clothingRepository: ClothingRepository?
     val entityRepository: EntityRepository?
     val meetingRepository: MeetingRepository?
+    val categoryRepository: CategoryRepository?
     val detector: GarmentDetector?
+    val fontSettings: FontSettings
 
     init {
         val appContext = context.applicationContext
+        fontSettings = FontSettings(appContext)
         if (!FirebaseConfig.isConfigured(appContext)) {
             status = FirebaseStatus.MissingConfig
             authRepository = null
             clothingRepository = null
             entityRepository = null
             meetingRepository = null
+            categoryRepository = null
             detector = null
         } else {
             val firebaseApp = FirebaseApp.getApps(appContext).firstOrNull()
@@ -52,6 +58,7 @@ class AppContainer(context: Context) {
                 clothingRepository = null
                 entityRepository = null
                 meetingRepository = null
+                categoryRepository = null
                 detector = null
             } else {
                 val firestore = Firebase.firestore
@@ -68,6 +75,7 @@ class AppContainer(context: Context) {
                 clothingRepository = FirestoreClothingRepository(firestore, auth, photos)
                 entityRepository = FirestoreEntityRepository(firestore, auth)
                 meetingRepository = FirestoreMeetingRepository(firestore, auth, photos)
+                categoryRepository = FirestoreCategoryRepository(firestore, auth)
                 detector = FirebaseAiGarmentDetector()
             }
         }

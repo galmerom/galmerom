@@ -9,7 +9,7 @@ object WardrobeRules {
     fun match(detected: DetectedGarment, items: List<ClothingItem>): ClothingItem? {
         val needle = detected.description.trim()
         if (needle.isEmpty()) return null
-        val candidates = selectable(items).filter { it.category == detected.category }
+        val candidates = selectable(items).filter { it.categoryId == detected.categoryId }
         return candidates.firstOrNull { it.description.trim().equals(needle, ignoreCase = true) }
             ?: candidates.firstOrNull { item ->
                 val hay = item.description.trim()

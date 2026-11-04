@@ -7,9 +7,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
+import com.galmerom.outfittracker.ui.LocalFontScale
 import androidx.core.view.WindowCompat
 
 private val LightColors = lightColorScheme(
@@ -60,7 +63,12 @@ fun OutfitTrackerTheme(content: @Composable () -> Unit) {
             controller.isAppearanceLightNavigationBars = true
         }
     }
-    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+    val density = LocalDensity.current
+    val fontScale = LocalFontScale.current
+    CompositionLocalProvider(
+        LocalLayoutDirection provides LayoutDirection.Rtl,
+        LocalDensity provides Density(density.density, density.fontScale * fontScale),
+    ) {
         MaterialTheme(
             colorScheme = LightColors,
             typography = AppTypography,

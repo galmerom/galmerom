@@ -2,10 +2,14 @@ package com.galmerom.outfittracker.ui.search
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.galmerom.outfittracker.domain.logic.MeetingSearch
 import com.galmerom.outfittracker.domain.logic.MeetingWindow
 import com.galmerom.outfittracker.domain.model.ClothingItem
+import com.galmerom.outfittracker.domain.model.Entity
 import com.galmerom.outfittracker.domain.model.Meeting
+import com.galmerom.outfittracker.domain.model.MeetingHit
 import com.galmerom.outfittracker.domain.repository.ClothingRepository
+import com.galmerom.outfittracker.domain.repository.EntityRepository
 import com.galmerom.outfittracker.domain.repository.MeetingRepository
 import com.galmerom.outfittracker.ui.UserMessage
 import com.galmerom.outfittracker.ui.toUserMessage
@@ -21,14 +25,16 @@ data class SearchUiState(
     val query: String = "",
     val pages: Int = 1,
     val meetings: List<Meeting> = emptyList(),
+    val entities: List<Entity> = emptyList(),
 ) {
-    val filtered: List<Meeting> get() = MeetingWindow.filter(meetings, query)
-    val visible: List<Meeting> get() = MeetingWindow.visible(filtered, pages)
-    val hasMore: Boolean get() = MeetingWindow.hasMore(filtered, pages)
+    val filtered: List<MeetingHit> get() = MeetingSearch.search(meetings, entities, query)
+    val visible: List<MeetingHit> get() = filtered.take(pages.coerceAtLeast(1) * MeetingWindow.PAGE_SIZE)
+    val hasMore: Boolean get() = filtered.size > pages.coerceAtLeast(1) * MeetingWindow.PAGE_SIZE
 }
 
 class SearchViewModel(
     meetings: MeetingRepository,
+    entities: EntityRepository,
 ) : ViewModel() {
     private val _state = MutableStateFlow(SearchUiState())
     val state: StateFlow<SearchUiState> = _state
@@ -40,6 +46,11 @@ class SearchViewModel(
         viewModelScope.launch {
             meetings.observeAll().catch { _messages.tryEmit(it.toUserMessage()) }.collect { list ->
                 _state.update { it.copy(meetings = list) }
+            }
+        }
+        viewModelScope.launch {
+            entities.observeAll().catch { _messages.tryEmit(it.toUserMessage()) }.collect { list ->
+                _state.update { it.copy(entities = list) }
             }
         }
     }

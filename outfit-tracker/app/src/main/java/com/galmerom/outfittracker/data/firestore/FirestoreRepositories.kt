@@ -5,6 +5,7 @@ import com.galmerom.outfittracker.data.photo.FirebasePhotoStorage
 import com.galmerom.outfittracker.domain.logic.Dates
 import com.galmerom.outfittracker.domain.logic.errorKind
 import com.galmerom.outfittracker.domain.model.ClothingCategory
+import com.galmerom.outfittracker.domain.model.DefaultCategories
 import com.galmerom.outfittracker.domain.model.ClothingItem
 import com.galmerom.outfittracker.domain.model.Entity
 import com.galmerom.outfittracker.domain.model.EntityType
@@ -12,6 +13,7 @@ import com.galmerom.outfittracker.domain.model.ErrorKind
 import com.galmerom.outfittracker.domain.model.Meeting
 import com.galmerom.outfittracker.domain.model.MeetingDraft
 import com.galmerom.outfittracker.domain.model.SaveOutcome
+import com.galmerom.outfittracker.domain.repository.CategoryRepository
 import com.galmerom.outfittracker.domain.repository.ClothingRepository
 import com.galmerom.outfittracker.domain.repository.EntityRepository
 import com.galmerom.outfittracker.domain.repository.MeetingRepository
@@ -21,6 +23,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.tasks.await
 
 private fun FirebaseFirestore.userCollection(uid: String, name: String) =
     collection("users").document(uid).collection(name)
@@ -52,8 +55,30 @@ class FirestoreClothingRepository(
     private val auth: FirebaseAuth,
     private val photos: FirebasePhotoStorage,
 ) : ClothingRepository {
-    override fun observeAll(): Flow<List<ClothingItem>> =
-        observeUserCollection(firestore, auth, CLOTHING, DocumentSnapshot::toClothingItem)
+    override fun observeAll(): Flow<List<ClothingItem>> = callbackFlow {
+        val uid = auth.currentUser?.uid
+        if (uid == null) {
+            trySend(emptyList())
+            awaitClose { }
+            return@callbackFlow
+        }
+        val registration = firestore.userCollection(uid, CLOTHING).addSnapshotListener { snapshot, error ->
+            if (error != null) {
+                close(error)
+                return@addSnapshotListener
+            }
+            snapshot?.documents?.forEach { document ->
+                val legacy = document.getString("category")
+                val categoryId = document.getString("categoryId")
+                val migrated = DefaultCategories.fromLegacy(legacy)
+                if (categoryId.isNullOrBlank() && migrated != null) {
+                    document.reference.update("categoryId", migrated)
+                }
+            }
+            trySend(snapshot?.documents?.mapNotNull { it.toClothingItem() }.orEmpty())
+        }
+        awaitClose { registration.remove() }
+    }
 
     override suspend fun upsert(
         item: ClothingItem,
@@ -109,9 +134,38 @@ class FirestoreEntityRepository(
         val entity = Entity(id = id, name = trimmed, type = type)
         return firestore.userCollection(uid, ENTITIES)
             .document(id)
-            .set(mapOf("name" to entity.name, "type" to entity.type.wire))
+            .set(
+                mapOf(
+                    "name" to entity.name,
+                    "type" to entity.type.wire,
+                    "hidden" to false,
+                    "memberIds" to emptyList<String>(),
+                ),
+            )
             .awaitCommitted()
             .map { entity }
+    }
+
+    override suspend fun update(id: String, name: String, type: EntityType): Result<Unit> {
+        val uid = auth.currentUser?.uid ?: return Result.failure(IllegalStateException("signed out"))
+        val trimmed = name.trim()
+        if (trimmed.isEmpty()) return Result.failure(IllegalArgumentException("empty name"))
+        val updates = mutableMapOf<String, Any>("name" to trimmed, "type" to type.wire)
+        if (type != EntityType.FORUM) updates["memberIds"] = emptyList<String>()
+        return firestore.userCollection(uid, ENTITIES).document(id).update(updates).awaitCommitted()
+    }
+
+    override suspend fun setHidden(id: String, hidden: Boolean): Result<Unit> {
+        val uid = auth.currentUser?.uid ?: return Result.failure(IllegalStateException("signed out"))
+        return firestore.userCollection(uid, ENTITIES).document(id).update("hidden", hidden).awaitCommitted()
+    }
+
+    override suspend fun setMembers(forumId: String, memberIds: List<String>): Result<Unit> {
+        val uid = auth.currentUser?.uid ?: return Result.failure(IllegalStateException("signed out"))
+        return firestore.userCollection(uid, ENTITIES)
+            .document(forumId)
+            .update("memberIds", memberIds.distinct())
+            .awaitCommitted()
     }
 
     private companion object {
@@ -162,21 +216,96 @@ class FirestoreMeetingRepository(
     }
 }
 
+class FirestoreCategoryRepository(
+    private val firestore: FirebaseFirestore,
+    private val auth: FirebaseAuth,
+) : CategoryRepository {
+    override fun observeAll(): Flow<List<ClothingCategory>> = callbackFlow {
+        val uid = auth.currentUser?.uid
+        if (uid == null) {
+            trySend(emptyList())
+            awaitClose { }
+            return@callbackFlow
+        }
+        val collection = firestore.userCollection(uid, CATEGORIES)
+        val existing = runCatching { collection.limit(1).get().await() }.getOrNull()
+        if (existing != null && existing.isEmpty) {
+            val batch = firestore.batch()
+            DefaultCategories.seeds.forEach { seed ->
+                batch.set(
+                    collection.document(seed.id),
+                    mapOf("name" to seed.name, "sortOrder" to seed.sortOrder),
+                )
+            }
+            runCatching { batch.commit().await() }
+        }
+        val registration = collection.addSnapshotListener { snapshot, error ->
+            if (error != null) {
+                close(error)
+                return@addSnapshotListener
+            }
+            val categories = snapshot?.documents?.mapNotNull { it.toCategory() }.orEmpty()
+                .sortedBy { it.sortOrder }
+            trySend(categories)
+        }
+        awaitClose { registration.remove() }
+    }
+
+    override suspend fun add(name: String): Result<ClothingCategory> {
+        val uid = auth.currentUser?.uid ?: return Result.failure(IllegalStateException("signed out"))
+        val trimmed = name.trim()
+        if (trimmed.isEmpty()) return Result.failure(IllegalArgumentException("empty name"))
+        val collection = firestore.userCollection(uid, CATEGORIES)
+        val nextOrder = runCatching {
+            collection.get().await().documents.mapNotNull { it.getLong("sortOrder")?.toInt() }.maxOrNull() ?: -1
+        }.getOrDefault(DefaultCategories.seeds.size - 1) + 1
+        val id = collection.document().id
+        val category = ClothingCategory(id, trimmed, nextOrder)
+        return collection.document(id)
+            .set(mapOf("name" to trimmed, "sortOrder" to nextOrder))
+            .awaitCommitted()
+            .map { category }
+    }
+
+    override suspend fun rename(id: String, name: String): Result<Unit> {
+        val uid = auth.currentUser?.uid ?: return Result.failure(IllegalStateException("signed out"))
+        val trimmed = name.trim()
+        if (trimmed.isEmpty()) return Result.failure(IllegalArgumentException("empty name"))
+        return firestore.userCollection(uid, CATEGORIES).document(id).update("name", trimmed).awaitCommitted()
+    }
+
+    private companion object {
+        const val CATEGORIES = "categories"
+    }
+}
+
 private fun ClothingItem.toMap(): Map<String, Any?> = mapOf(
     "description" to description,
-    "category" to category.wire,
+    "categoryId" to categoryId,
     "photoUrl" to photoUrl,
     "hidden" to hidden,
 )
 
 private fun DocumentSnapshot.toClothingItem(): ClothingItem? {
-    val category = ClothingCategory.fromWire(getString("category")) ?: return null
+    val categoryId = getString("categoryId")?.takeIf { it.isNotBlank() }
+        ?: DefaultCategories.fromLegacy(getString("category"))
+        ?: return null
     return ClothingItem(
         id = id,
         description = getString("description").orEmpty(),
-        category = category,
+        categoryId = categoryId,
         photoUrl = getString("photoUrl")?.takeIf { it.isNotBlank() },
         hidden = getBoolean("hidden") ?: false,
+    )
+}
+
+private fun DocumentSnapshot.toCategory(): ClothingCategory? {
+    val name = getString("name")?.trim().orEmpty()
+    if (name.isEmpty()) return null
+    return ClothingCategory(
+        id = id,
+        name = name,
+        sortOrder = getLong("sortOrder")?.toInt() ?: 0,
     )
 }
 
@@ -184,7 +313,14 @@ private fun DocumentSnapshot.toEntity(): Entity? {
     val type = EntityType.fromWire(getString("type")) ?: return null
     val name = getString("name")?.trim().orEmpty()
     if (name.isEmpty()) return null
-    return Entity(id = id, name = name, type = type)
+    val members = (get("memberIds") as? List<*>)?.mapNotNull { it as? String }.orEmpty()
+    return Entity(
+        id = id,
+        name = name,
+        type = type,
+        hidden = getBoolean("hidden") ?: false,
+        memberIds = members,
+    )
 }
 
 private fun DocumentSnapshot.toMeeting(): Meeting? {

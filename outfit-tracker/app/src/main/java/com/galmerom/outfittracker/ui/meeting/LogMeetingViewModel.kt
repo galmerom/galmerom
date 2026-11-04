@@ -5,16 +5,20 @@ import androidx.lifecycle.viewModelScope
 import com.galmerom.outfittracker.domain.GarmentDetector
 import com.galmerom.outfittracker.domain.logic.EntitySuggestions
 import com.galmerom.outfittracker.domain.logic.WardrobeRules
+import com.galmerom.outfittracker.domain.logic.meetingCounts
 import com.galmerom.outfittracker.domain.model.ClothingCategory
 import com.galmerom.outfittracker.domain.model.ClothingItem
 import com.galmerom.outfittracker.domain.model.DetectedGarment
 import com.galmerom.outfittracker.domain.model.Entity
 import com.galmerom.outfittracker.domain.model.EntityType
+import com.galmerom.outfittracker.domain.model.Meeting
 import com.galmerom.outfittracker.domain.model.MeetingDraft
 import com.galmerom.outfittracker.domain.model.SaveOutcome
+import com.galmerom.outfittracker.domain.repository.CategoryRepository
 import com.galmerom.outfittracker.domain.repository.ClothingRepository
 import com.galmerom.outfittracker.domain.repository.EntityRepository
 import com.galmerom.outfittracker.domain.repository.MeetingRepository
+import java.util.UUID
 import com.galmerom.outfittracker.ui.UserMessage
 import com.galmerom.outfittracker.ui.toUserMessage
 import java.time.LocalDate
@@ -31,6 +35,13 @@ data class AiSuggestion(
     val match: ClothingItem?,
 )
 
+data class ClothingPickRow(
+    val key: String,
+    val categoryId: String = "",
+    val query: String = "",
+    val itemId: String? = null,
+)
+
 data class LogMeetingUiState(
     val date: LocalDate = LocalDate.now(),
     val entityQuery: String = "",
@@ -38,6 +49,10 @@ data class LogMeetingUiState(
     val selectedEntity: Entity? = null,
     val newEntityType: EntityType = EntityType.PERSON,
     val wardrobe: List<ClothingItem> = emptyList(),
+    val categories: List<ClothingCategory> = emptyList(),
+    val meetings: List<Meeting> = emptyList(),
+    val rows: List<ClothingPickRow> = emptyList(),
+    val aiSelectedIds: Set<String> = emptySet(),
     val selectedClothingIds: Set<String> = emptySet(),
     val note: String = "",
     val meetingPhoto: ByteArray? = null,
@@ -47,15 +62,26 @@ data class LogMeetingUiState(
     val saving: Boolean = false,
     val creatingEntity: Boolean = false,
 ) {
-    val suggestions: List<Entity> get() = EntitySuggestions.match(entityQuery, entities)
+    val suggestions: List<Entity>
+        get() = if (entityQuery.isBlank()) {
+            emptyList()
+        } else {
+            EntitySuggestions.forPicker(entityQuery, entities, meetingCounts(meetings))
+        }
     val offerCreate: Boolean get() = EntitySuggestions.shouldOfferCreate(entityQuery, entities)
     val selectable: List<ClothingItem> get() = WardrobeRules.selectable(wardrobe)
+
+    fun syncSelection(): LogMeetingUiState {
+        val ids = rows.mapNotNull { it.itemId }.toSet() + aiSelectedIds
+        return copy(selectedClothingIds = ids)
+    }
 }
 
 class LogMeetingViewModel(
     private val clothing: ClothingRepository,
     private val entities: EntityRepository,
     private val meetings: MeetingRepository,
+    private val categoriesRepo: CategoryRepository,
     private val detector: GarmentDetector,
 ) : ViewModel() {
     private val _state = MutableStateFlow(LogMeetingUiState())
@@ -75,6 +101,52 @@ class LogMeetingViewModel(
                 _state.update { it.copy(entities = list) }
             }
         }
+        viewModelScope.launch {
+            meetings.observeAll().catch { report(it.toUserMessage()) }.collect { list ->
+                _state.update { it.copy(meetings = list) }
+            }
+        }
+        viewModelScope.launch {
+            categoriesRepo.observeAll().catch { report(it.toUserMessage()) }.collect { list ->
+                _state.update { it.copy(categories = list) }
+            }
+        }
+    }
+
+    fun addClothingRow() = _state.update { state ->
+        state.copy(rows = state.rows + ClothingPickRow(UUID.randomUUID().toString())).syncSelection()
+    }
+
+    fun removeClothingRow(key: String) = _state.update { state ->
+        state.copy(rows = state.rows.filterNot { it.key == key }).syncSelection()
+    }
+
+    fun onRowCategory(key: String, categoryId: String) = _state.update { state ->
+        state.copy(
+            rows = state.rows.map { row ->
+                if (row.key == key) row.copy(categoryId = categoryId, itemId = null) else row
+            },
+        ).syncSelection()
+    }
+
+    fun onRowQuery(key: String, query: String) = _state.update { state ->
+        state.copy(
+            rows = state.rows.map { row ->
+                if (row.key == key) row.copy(query = query, itemId = null) else row
+            },
+        ).syncSelection()
+    }
+
+    fun selectRowItem(key: String, item: ClothingItem) = _state.update { state ->
+        state.copy(
+            rows = state.rows.map { row ->
+                if (row.key == key) {
+                    row.copy(itemId = item.id, query = item.description, categoryId = item.categoryId)
+                } else {
+                    row
+                }
+            },
+        ).syncSelection()
     }
 
     fun onDate(date: LocalDate) = _state.update { it.copy(date = date) }
@@ -105,7 +177,10 @@ class LogMeetingViewModel(
     }
 
     fun removeClothing(id: String) = _state.update { state ->
-        state.copy(selectedClothingIds = state.selectedClothingIds - id)
+        state.copy(
+            aiSelectedIds = state.aiSelectedIds - id,
+            rows = state.rows.map { row -> if (row.itemId == id) row.copy(itemId = null) else row },
+        ).syncSelection()
     }
 
     fun createEntity() {
@@ -132,7 +207,7 @@ class LogMeetingViewModel(
         }
     }
 
-    fun addManual(description: String, category: ClothingCategory, photo: ByteArray?) {
+    fun addManual(description: String, categoryId: String, photo: ByteArray?) {
         if (description.trim().isEmpty()) {
             report(UserMessage.NEED_DESCRIPTION)
             return
@@ -142,14 +217,14 @@ class LogMeetingViewModel(
                 ClothingItem(
                     id = "",
                     description = description,
-                    category = category,
+                    categoryId = categoryId,
                     photoUrl = null,
                     hidden = false,
                 ),
                 photo,
             ).fold(
                 onSuccess = { (item, outcome) ->
-                    _state.update { it.copy(selectedClothingIds = it.selectedClothingIds + item.id) }
+                    _state.update { it.copy(aiSelectedIds = it.aiSelectedIds + item.id).syncSelection() }
                     report(
                         if (outcome == SaveOutcome.SAVED_WITHOUT_PHOTO) {
                             UserMessage.SAVED_WITHOUT_PHOTO
@@ -168,7 +243,7 @@ class LogMeetingViewModel(
         if (_state.value.detecting) return
         viewModelScope.launch {
             _state.update { it.copy(detecting = true) }
-            detector.detect(jpeg).fold(
+            detector.detect(jpeg, _state.value.categories).fold(
                 onSuccess = { garments ->
                     if (garments.isEmpty()) {
                         _state.update { it.copy(detecting = false, aiSuggestions = emptyList()) }
@@ -204,7 +279,7 @@ class LogMeetingViewModel(
                     ClothingItem(
                         id = "",
                         description = suggestion.garment.description,
-                        category = suggestion.garment.category,
+                        categoryId = suggestion.garment.categoryId,
                         photoUrl = null,
                         hidden = false,
                     ),
@@ -217,9 +292,9 @@ class LogMeetingViewModel(
             }
             _state.update { state ->
                 state.copy(
-                    selectedClothingIds = state.selectedClothingIds + item.id,
+                    aiSelectedIds = state.aiSelectedIds + item.id,
                     aiSuggestions = state.aiSuggestions.filterIndexed { suggestionIndex, _ -> suggestionIndex != index },
-                )
+                ).syncSelection()
             }
         }
     }
@@ -254,6 +329,8 @@ class LogMeetingViewModel(
                     _state.value = LogMeetingUiState(
                         entities = _state.value.entities,
                         wardrobe = _state.value.wardrobe,
+                        categories = _state.value.categories,
+                        meetings = _state.value.meetings,
                     )
                     report(
                         if (outcome == SaveOutcome.SAVED_WITHOUT_PHOTO) {

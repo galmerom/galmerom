@@ -8,8 +8,9 @@ The interface is Hebrew. The on-screen name for a person or forum is the string 
 
 Each signed-in user has their own data under `users/{uid}/`:
 
-- **entities** — `name`, `type` (`person` or `forum`)
-- **clothingItems** — `description`, `category` (`shirt`, `pants`, `skirt`, `dress`, `jacket`, `shoes`, `accessory`, `other`), `photoUrl`, `hidden`
+- **entities** — `name`, `type` (`person` or `forum`), `hidden`, and for a forum `memberIds` (people who belong to it)
+- **categories** — user-defined names. Seeded once with shirt, pants, skirt, dress, jacket, shoes, accessory, and other. They can be renamed, not deleted.
+- **clothingItems** — `description`, `categoryId`, `photoUrl`, `hidden`
 - **meetings** — `date` (`YYYY-MM-DD`), `entityId`, `entityName`, `clothingItemIds`, optional `photoUrl`, `note`
 
 Photos are downscaled on the phone to about 1280px JPEG, then uploaded to Cloud Storage at `users/{uid}/…`. Sign-in is Firebase Auth with the user's Google account through Credential Manager, so the wardrobe survives replacing the phone. Firestore disk persistence is turned on and syncs when the network is back.
