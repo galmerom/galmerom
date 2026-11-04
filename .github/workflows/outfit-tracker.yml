@@ -14,7 +14,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: outfit-tracker-debug-${{ github.ref }}
+  group: outfit-tracker-latest-release
   cancel-in-progress: false
 
 jobs:
@@ -53,15 +53,23 @@ jobs:
         working-directory: outfit-tracker
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           test -f app/build/outputs/apk/debug/app-debug.apk
           cp app/build/outputs/apk/debug/app-debug.apk "${RUNNER_TEMP}/outfit-tracker.apk"
+          NOTES="Debug APK from ${GITHUB_SHA}."
           if gh release view outfit-tracker-latest >/dev/null 2>&1; then
-            gh release delete outfit-tracker-latest --yes --cleanup-tag
+            gh release upload outfit-tracker-latest "${RUNNER_TEMP}/outfit-tracker.apk" --clobber
+            gh release edit outfit-tracker-latest \
+              --prerelease \
+              --title "Outfit Tracker latest debug" \
+              --notes "${NOTES}"
+          else
+            gh api --method DELETE "repos/${GH_REPO}/git/refs/tags/outfit-tracker-latest" >/dev/null 2>&1 || true
+            gh release create outfit-tracker-latest "${RUNNER_TEMP}/outfit-tracker.apk" \
+              --prerelease \
+              --target "${GITHUB_SHA}" \
+              --title "Outfit Tracker latest debug" \
+              --notes "${NOTES}"
           fi
-          gh release create outfit-tracker-latest "${RUNNER_TEMP}/outfit-tracker.apk" \
-            --prerelease \
-            --target "${{ github.sha }}" \
-            --title "Outfit Tracker latest debug" \
-            --notes "Debug APK from ${{ github.sha }}. Replace this build on the next push."
