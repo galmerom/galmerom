@@ -17,6 +17,8 @@ import androidx.compose.material.icons.outlined.Search
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.FilterChip
@@ -48,7 +50,9 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -69,7 +73,9 @@ import com.galmerom.outfittracker.R
 import com.galmerom.outfittracker.data.AppContainer
 import com.galmerom.outfittracker.data.FirebaseStatus
 import com.galmerom.outfittracker.domain.repository.SignedInUser
+import com.galmerom.outfittracker.ui.LeaveGate
 import com.galmerom.outfittracker.ui.LocalAppContainer
+import com.galmerom.outfittracker.ui.LocalLeaveGate
 import com.galmerom.outfittracker.ui.UserMessage
 import com.galmerom.outfittracker.ui.auth.SignInScreen
 import com.galmerom.outfittracker.ui.meeting.LogMeetingScreen
@@ -94,10 +100,11 @@ private object Routes {
     const val ENTITIES_HIDDEN = "entities/hidden"
     const val ENTITY_EDIT = "entities/edit/{entityId}"
     const val CATEGORIES = "categories"
-    const val EDIT = "wardrobe/edit/{itemId}"
+    const val EDIT = "wardrobe/edit/{itemId}?categoryId={categoryId}"
     const val DETAIL = "meeting/{meetingId}"
 
-    fun edit(itemId: String) = "wardrobe/edit/$itemId"
+    fun edit(itemId: String, categoryId: String? = null): String =
+        if (categoryId.isNullOrBlank()) "wardrobe/edit/$itemId" else "wardrobe/edit/$itemId?categoryId=$categoryId"
     fun detail(meetingId: String) = "meeting/$meetingId"
     fun entity(entityId: String) = "entities/edit/$entityId"
 }
@@ -172,6 +179,13 @@ private fun AppScaffold(user: SignedInUser) {
     val scope = rememberCoroutineScope()
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val prefs by container.preferences.prefs.collectAsStateWithLifecycle(com.galmerom.outfittracker.data.UserPrefs())
+    val leaveGate = remember { LeaveGate() }
+    fun goHome() {
+        navController.navigate(Routes.HOME) {
+            popUpTo(Routes.HOME) { inclusive = false }
+            launchSingleTop = true
+        }
+    }
     val entityLabel = stringResource(R.string.entity_label)
     val barColors = NavigationBarItemDefaults.colors(
         selectedIconColor = MaterialTheme.colorScheme.primary,
@@ -180,6 +194,7 @@ private fun AppScaffold(user: SignedInUser) {
         unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
         unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
     )
+    CompositionLocalProvider(LocalLeaveGate provides leaveGate) {
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
@@ -240,13 +255,13 @@ private fun AppScaffold(user: SignedInUser) {
                     title = { Text(stringResource(R.string.app_name), style = MaterialTheme.typography.titleLarge) },
                     actions = {
                         if (showHomeButton) {
-                            TextButton(
-                                onClick = {
-                                    navController.navigate(Routes.HOME) {
-                                        popUpTo(Routes.HOME) { inclusive = false }
-                                        launchSingleTop = true
-                                    }
-                                },
+                            Button(
+                                onClick = { leaveGate.onLeave?.invoke() ?: goHome() },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.primary,
+                                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                                ),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
                             ) {
                                 Text(stringResource(R.string.back_home))
                             }
@@ -296,19 +311,30 @@ private fun AppScaffold(user: SignedInUser) {
             startDestination = Routes.HOME,
             modifier = Modifier.padding(padding),
         ) {
-            composable(Routes.HOME) {
+            composable(Routes.HOME) { entry ->
+                val meetingSaved by entry.savedStateHandle
+                    .getStateFlow("meetingSaved", false)
+                    .collectAsStateWithLifecycle()
                 HomeScreen(
+                    showMeetingSaved = meetingSaved,
+                    onMeetingSavedShown = { entry.savedStateHandle["meetingSaved"] = false },
                     onNewMeeting = { navController.navigate(Routes.LOG) },
                     onSearch = { navController.navigate(Routes.SEARCH) },
                     onWardrobe = { navController.navigate(Routes.WARDROBE) },
                 )
             }
-            composable(Routes.LOG) { LogMeetingScreen() }
+            composable(Routes.LOG) { entry ->
+                MeetingLogRoute(entry = entry, meetingId = null, navController = navController)
+            }
             composable(
                 route = Routes.LOG_EDIT,
                 arguments = listOf(navArgument("meetingId") { type = NavType.StringType }),
             ) { entry ->
-                LogMeetingScreen(meetingId = entry.arguments?.getString("meetingId"))
+                MeetingLogRoute(
+                    entry = entry,
+                    meetingId = entry.arguments?.getString("meetingId"),
+                    navController = navController,
+                )
             }
             composable(Routes.SEARCH) {
                 SearchScreen(
@@ -326,11 +352,24 @@ private fun AppScaffold(user: SignedInUser) {
             composable(Routes.HIDDEN) { HiddenItemsScreen(onBack = { navController.popBackStack() }) }
             composable(
                 route = Routes.EDIT,
-                arguments = listOf(navArgument("itemId") { type = NavType.StringType }),
+                arguments = listOf(
+                    navArgument("itemId") { type = NavType.StringType },
+                    navArgument("categoryId") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    },
+                ),
             ) { entry ->
                 ClothingEditScreen(
                     itemId = entry.arguments?.getString("itemId").orEmpty(),
-                    onBack = { navController.popBackStack() },
+                    initialCategoryId = entry.arguments?.getString("categoryId"),
+                    onBack = { savedItemId ->
+                        if (!savedItemId.isNullOrBlank()) {
+                            navController.previousBackStackEntry?.savedStateHandle?.set("addedClothingId", savedItemId)
+                        }
+                        navController.popBackStack()
+                    },
                 )
             }
             composable(
@@ -383,19 +422,79 @@ private fun AppScaffold(user: SignedInUser) {
         }
     }
     }
+    }
 }
 
 @Composable
-private fun HomeScreen(onNewMeeting: () -> Unit, onSearch: () -> Unit, onWardrobe: () -> Unit) {
+private fun HomeScreen(
+    showMeetingSaved: Boolean,
+    onMeetingSavedShown: () -> Unit,
+    onNewMeeting: () -> Unit,
+    onSearch: () -> Unit,
+    onWardrobe: () -> Unit,
+) {
+    androidx.compose.runtime.LaunchedEffect(showMeetingSaved) {
+        if (showMeetingSaved) {
+            kotlinx.coroutines.delay(4_000)
+            onMeetingSavedShown()
+        }
+    }
     Column(
         modifier = Modifier.fillMaxSize().padding(24.dp),
         verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(16.dp),
     ) {
+        if (showMeetingSaved) {
+            androidx.compose.material3.Card(
+                colors = androidx.compose.material3.CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                ),
+                shape = MaterialTheme.shapes.medium,
+            ) {
+                Text(
+                    stringResource(R.string.meeting_saved_home),
+                    modifier = Modifier.padding(16.dp),
+                    style = MaterialTheme.typography.titleLarge,
+                )
+            }
+        }
         Text(stringResource(R.string.hello), style = MaterialTheme.typography.headlineMedium)
         HomeButton(stringResource(R.string.home_new_meeting), onNewMeeting)
         HomeButton(stringResource(R.string.nav_wardrobe), onWardrobe)
         HomeButton(stringResource(R.string.nav_search), onSearch)
     }
+}
+
+@Composable
+private fun MeetingLogRoute(
+    entry: androidx.navigation.NavBackStackEntry,
+    meetingId: String?,
+    navController: androidx.navigation.NavController,
+) {
+    val addedClothingId by entry.savedStateHandle
+        .getStateFlow("addedClothingId", "")
+        .collectAsStateWithLifecycle()
+    val pendingUnmatchedKey = entry.savedStateHandle.get<String>("unmatchedKey")
+    LogMeetingScreen(
+        meetingId = meetingId,
+        addedClothingId = addedClothingId,
+        pendingUnmatchedKey = pendingUnmatchedKey,
+        onAddedClothingConsumed = {
+            entry.savedStateHandle["addedClothingId"] = ""
+            entry.savedStateHandle.remove<String>("unmatchedKey")
+        },
+        onCreateGarment = { key, categoryId ->
+            entry.savedStateHandle["unmatchedKey"] = key
+            navController.navigate(Routes.edit(ClothingEditViewModel.NEW_ID, categoryId))
+        },
+        onSaved = {
+            navController.getBackStackEntry(Routes.HOME).savedStateHandle["meetingSaved"] = true
+            navController.popBackStack(Routes.HOME, inclusive = false)
+        },
+        onLeave = {
+            navController.popBackStack(Routes.HOME, inclusive = false)
+        },
+    )
 }
 
 @Composable

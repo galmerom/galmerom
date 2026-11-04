@@ -185,13 +185,19 @@ fun HiddenItemsScreen(onBack: () -> Unit) {
 }
 
 @Composable
-fun ClothingEditScreen(itemId: String, onBack: () -> Unit) {
+fun ClothingEditScreen(
+    itemId: String,
+    initialCategoryId: String? = null,
+    onBack: (savedItemId: String?) -> Unit,
+) {
     val container = LocalAppContainer.current
     val clothing = container.clothingRepository ?: return
     val categoriesRepo = container.categoryRepository ?: return
     val viewModel: ClothingEditViewModel = viewModel(
-        key = itemId,
-        factory = viewModelFactory { ClothingEditViewModel(itemId, clothing, categoriesRepo) },
+        key = "$itemId:${initialCategoryId.orEmpty()}",
+        factory = viewModelFactory {
+            ClothingEditViewModel(itemId, clothing, categoriesRepo, initialCategoryId)
+        },
     )
     val state by viewModel.state.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
@@ -202,7 +208,7 @@ fun ClothingEditScreen(itemId: String, onBack: () -> Unit) {
         }
     }
     LaunchedEffect(state.saved) {
-        if (state.saved) onBack()
+        if (state.saved) onBack(state.savedItemId)
     }
     val photos = rememberPhotoActions(
         onJpeg = viewModel::onPhoto,
@@ -215,7 +221,7 @@ fun ClothingEditScreen(itemId: String, onBack: () -> Unit) {
     } else {
         stringResource(R.string.clothing_edit_title)
     }
-    SecondaryPage(title = title, onBack = onBack, snackbar = snackbar) { padding ->
+    SecondaryPage(title = title, onBack = { onBack(null) }, snackbar = snackbar) { padding ->
         if (!state.ready) {
             CircularProgressIndicator(Modifier.padding(padding).padding(24.dp))
             return@SecondaryPage

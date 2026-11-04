@@ -3,6 +3,7 @@ package com.galmerom.outfittracker.ui.meeting
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.galmerom.outfittracker.domain.GarmentDetector
+import com.galmerom.outfittracker.domain.WardrobeDetection
 import com.galmerom.outfittracker.domain.logic.EntitySuggestions
 import com.galmerom.outfittracker.domain.logic.WardrobeRules
 import com.galmerom.outfittracker.domain.logic.RepeatWarnings
@@ -37,8 +38,12 @@ enum class DetectionNotice {
 }
 
 data class AiSuggestion(
-    val itemId: String,
-)
+    val key: String,
+    val itemId: String? = null,
+    val categoryId: String? = null,
+) {
+    val unmatched: Boolean get() = itemId == null
+}
 
 data class ClothingPickRow(
     val key: String,
@@ -90,6 +95,18 @@ data class LogMeetingUiState(
         val ids = rows.mapNotNull { it.itemId }.toSet() + aiSelectedIds
         return copy(selectedClothingIds = ids)
     }
+
+    fun hasEnteredData(today: LocalDate = LocalDate.now()): Boolean =
+        editingId != null ||
+            selectedEntities.isNotEmpty() ||
+            note.isNotBlank() ||
+            rows.isNotEmpty() ||
+            selectedClothingIds.isNotEmpty() ||
+            meetingPhoto != null ||
+            !existingPhotoUrl.isNullOrBlank() ||
+            entityQuery.isNotBlank() ||
+            aiSuggestions.isNotEmpty() ||
+            date != today
 }
 
 class LogMeetingViewModel(
@@ -105,6 +122,8 @@ class LogMeetingViewModel(
 
     private val _messages = MutableSharedFlow<UserMessage>(extraBufferCapacity = 8)
     val messages = _messages.asSharedFlow()
+    private val _finished = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val finished = _finished.asSharedFlow()
 
     init {
         viewModelScope.launch {
@@ -272,19 +291,10 @@ class LogMeetingViewModel(
         val jpeg = _state.value.meetingPhoto ?: return
         if (_state.value.detecting) return
         val known = WardrobeRules.selectable(_state.value.wardrobe)
-        if (known.isEmpty()) return
         viewModelScope.launch {
             _state.update { it.copy(detecting = true, detectionNotice = DetectionNotice.None) }
             detector.detect(jpeg, known, _state.value.categories).fold(
-                onSuccess = { ids ->
-                    _state.update {
-                        it.copy(
-                            detecting = false,
-                            detectionNotice = if (ids.isEmpty()) DetectionNotice.NoMatch else DetectionNotice.None,
-                            aiSuggestions = ids.map { id -> AiSuggestion(id) },
-                        )
-                    }
-                },
+                onSuccess = { detection -> _state.update { it.withDetection(detection) } },
                 onFailure = {
                     _state.update {
                         it.copy(
@@ -304,6 +314,20 @@ class LogMeetingViewModel(
             state.copy(
                 aiSelectedIds = state.aiSelectedIds + itemId,
                 aiSuggestions = state.aiSuggestions.filterNot { it.itemId == itemId },
+            ).syncSelection()
+        }
+    }
+
+    fun dismissSuggestion(key: String) = _state.update { state ->
+        state.copy(aiSuggestions = state.aiSuggestions.filterNot { it.key == key })
+    }
+
+    fun attachCreatedItem(itemId: String, suggestionKey: String?) {
+        if (itemId.isBlank()) return
+        _state.update { state ->
+            state.copy(
+                aiSelectedIds = state.aiSelectedIds + itemId,
+                aiSuggestions = state.aiSuggestions.filterNot { suggestionKey != null && it.key == suggestionKey },
             ).syncSelection()
         }
     }
@@ -334,24 +358,9 @@ class LogMeetingViewModel(
                 meetings.update(editingMeetingId, draft, current.meetingPhoto, current.existingPhotoUrl)
             }
             result.fold(
-                onSuccess = { outcome ->
-                    if (editingMeetingId == null) {
-                        _state.value = LogMeetingUiState(
-                            entities = _state.value.entities,
-                            wardrobe = _state.value.wardrobe,
-                            categories = _state.value.categories,
-                            meetings = _state.value.meetings,
-                        )
-                    } else {
-                        _state.update { it.copy(saving = false) }
-                    }
-                    report(
-                        if (outcome == SaveOutcome.SAVED_WITHOUT_PHOTO) {
-                            UserMessage.SAVED_WITHOUT_PHOTO
-                        } else {
-                            UserMessage.MEETING_SAVED
-                        },
-                    )
+                onSuccess = {
+                    _state.update { it.copy(saving = false) }
+                    _finished.tryEmit(Unit)
                 },
                 onFailure = { error ->
                     _state.update { it.copy(saving = false) }
@@ -397,6 +406,19 @@ class LogMeetingViewModel(
                 editingId = meeting.id,
             ).syncSelection()
         }
+    }
+
+    private fun LogMeetingUiState.withDetection(detection: WardrobeDetection): LogMeetingUiState {
+        val matches = detection.matchedIds.map { id -> AiSuggestion(key = id, itemId = id) }
+        val missing = detection.unmatchedCategories.map { categoryId ->
+            AiSuggestion(key = UUID.randomUUID().toString(), categoryId = categoryId)
+        }
+        val suggestions = matches + missing
+        return copy(
+            detecting = false,
+            detectionNotice = if (suggestions.isEmpty()) DetectionNotice.NoMatch else DetectionNotice.None,
+            aiSuggestions = suggestions,
+        )
     }
 
     fun notify(message: UserMessage) = report(message)

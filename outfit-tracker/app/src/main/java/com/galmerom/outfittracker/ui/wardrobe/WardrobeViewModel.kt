@@ -60,12 +60,14 @@ data class ClothingEditUiState(
     val photoJpeg: ByteArray? = null,
     val saving: Boolean = false,
     val saved: Boolean = false,
+    val savedItemId: String? = null,
 )
 
 class ClothingEditViewModel(
     private val itemId: String,
     private val clothing: ClothingRepository,
     categories: CategoryRepository,
+    private val initialCategoryId: String? = null,
 ) : ViewModel() {
     private val _state = MutableStateFlow(ClothingEditUiState(ready = itemId == NEW_ID))
     val state: StateFlow<ClothingEditUiState> = _state
@@ -79,10 +81,10 @@ class ClothingEditViewModel(
         viewModelScope.launch {
             categories.observeAll().catch { _messages.emit(it.toUserMessage()) }.collect { list ->
                 _state.update { state ->
-                    state.copy(
-                        categories = list,
-                        categoryId = state.categoryId.ifBlank { list.firstOrNull()?.id.orEmpty() },
-                    )
+                    val preferred = state.categoryId.ifBlank {
+                        initialCategoryId?.takeIf { id -> list.any { it.id == id } }.orEmpty()
+                    }.ifBlank { list.firstOrNull()?.id.orEmpty() }
+                    state.copy(categories = list, categoryId = preferred)
                 }
             }
         }
@@ -143,8 +145,8 @@ class ClothingEditViewModel(
                 current.photoJpeg,
             )
             result.fold(
-                onSuccess = { (_, outcome) ->
-                    _state.update { it.copy(saving = false, saved = true) }
+                onSuccess = { (item, outcome) ->
+                    _state.update { it.copy(saving = false, saved = true, savedItemId = item.id) }
                     _messages.emit(
                         if (outcome == SaveOutcome.SAVED_WITHOUT_PHOTO) {
                             UserMessage.SAVED_WITHOUT_PHOTO

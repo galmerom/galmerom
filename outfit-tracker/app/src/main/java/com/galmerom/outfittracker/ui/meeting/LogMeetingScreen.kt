@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.activity.compose.BackHandler
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.outlined.DateRange
 import androidx.compose.material3.AlertDialog
@@ -26,6 +28,7 @@ import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.InputChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -39,12 +42,14 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.ui.Alignment
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.res.stringResource
@@ -69,13 +74,22 @@ import com.galmerom.outfittracker.ui.common.appTextFieldColors
 import com.galmerom.outfittracker.ui.common.labelRes
 import com.galmerom.outfittracker.ui.common.rememberPhotoActions
 import com.galmerom.outfittracker.ui.common.toHebrewDate
+import com.galmerom.outfittracker.ui.LocalLeaveGate
 import com.galmerom.outfittracker.ui.UserMessage
 import com.galmerom.outfittracker.ui.textFor
 import com.galmerom.outfittracker.ui.viewModelFactory
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-fun LogMeetingScreen(meetingId: String? = null) {
+fun LogMeetingScreen(
+    meetingId: String? = null,
+    addedClothingId: String = "",
+    pendingUnmatchedKey: String? = null,
+    onAddedClothingConsumed: () -> Unit = {},
+    onCreateGarment: (String, String?) -> Unit = { _, _ -> },
+    onSaved: () -> Unit = {},
+    onLeave: () -> Unit = {},
+) {
     val container = LocalAppContainer.current
     val clothing = container.clothingRepository ?: return
     val entities = container.entityRepository ?: return
@@ -93,8 +107,30 @@ fun LogMeetingScreen(meetingId: String? = null) {
     val context = LocalContext.current
     var showDate by remember { mutableStateOf(false) }
     var showManual by remember { mutableStateOf(false) }
+    var askCancel by remember { mutableStateOf(false) }
+    var confirmSuggestions by remember { mutableStateOf(false) }
+    val leaveGate = LocalLeaveGate.current
+    val dirty = state.hasEnteredData()
+    DisposableEffect(dirty) {
+        leaveGate.onLeave = {
+            if (state.hasEnteredData()) askCancel = true else onLeave()
+        }
+        onDispose { leaveGate.onLeave = null }
+    }
+    BackHandler {
+        if (state.hasEnteredData()) askCancel = true else onLeave()
+    }
     LaunchedEffect(viewModel) {
         viewModel.messages.collect { snackbar.showSnackbar(context.textFor(it)) }
+    }
+    LaunchedEffect(viewModel) {
+        viewModel.finished.collect { onSaved() }
+    }
+    LaunchedEffect(addedClothingId) {
+        if (addedClothingId.isNotBlank()) {
+            viewModel.attachCreatedItem(addedClothingId, pendingUnmatchedKey)
+            onAddedClothingConsumed()
+        }
     }
     val entityLabel = stringResource(R.string.entity_label)
     Column(modifier = Modifier.fillMaxSize()) {
@@ -223,43 +259,24 @@ fun LogMeetingScreen(meetingId: String? = null) {
                 onFailure = { viewModel.notify(UserMessage.GENERIC) },
             )
             state.aiSuggestions.forEach { suggestion ->
-                val item = state.wardrobe.firstOrNull { it.id == suggestion.itemId } ?: return@forEach
-                val categoryName = state.categories.firstOrNull { it.id == item.categoryId }?.name ?: item.categoryId
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = MaterialTheme.shapes.medium,
-                    colors = appCardColors(),
-                    elevation = appCardElevation(),
-                ) {
-                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            ClothingImage(
-                                jpeg = state.meetingPhoto,
-                                url = if (state.meetingPhoto == null) state.existingPhotoUrl else null,
-                                description = stringResource(R.string.meeting_photo_description),
-                                modifier = Modifier.size(96.dp),
-                            )
-                            ClothingImage(
-                                jpeg = null,
-                                url = item.photoUrl,
-                                description = item.description,
-                                modifier = Modifier.size(96.dp),
-                            )
-                            Column(Modifier.weight(1f)) {
-                                Text(item.description, style = MaterialTheme.typography.titleMedium)
-                                Text(categoryName, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                        }
-                        Button(
-                            onClick = { viewModel.acceptSuggestion(item.id) },
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Text(stringResource(R.string.ai_use))
-                        }
-                    }
+                if (suggestion.unmatched) {
+                    UnmatchedSuggestionCard(
+                        meetingJpeg = state.meetingPhoto,
+                        existingUrl = state.existingPhotoUrl,
+                        onOpen = { onCreateGarment(suggestion.key, suggestion.categoryId) },
+                        onDismiss = { viewModel.dismissSuggestion(suggestion.key) },
+                    )
+                } else {
+                    val item = state.wardrobe.firstOrNull { it.id == suggestion.itemId } ?: return@forEach
+                    val categoryName = state.categories.firstOrNull { it.id == item.categoryId }?.name ?: item.categoryId
+                    MatchedSuggestionCard(
+                        item = item,
+                        categoryName = categoryName,
+                        meetingJpeg = state.meetingPhoto,
+                        existingUrl = state.existingPhotoUrl,
+                        onApprove = { viewModel.acceptSuggestion(item.id) },
+                        onDismiss = { viewModel.dismissSuggestion(suggestion.key) },
+                    )
                 }
             }
 
@@ -325,7 +342,9 @@ fun LogMeetingScreen(meetingId: String? = null) {
                 minLines = 2,
             )
             Button(
-                onClick = viewModel::save,
+                onClick = {
+                    if (state.aiSuggestions.isNotEmpty()) confirmSuggestions = true else viewModel.save()
+                },
                 enabled = !state.saving,
                 modifier = Modifier.fillMaxWidth(),
             ) {
@@ -337,6 +356,37 @@ fun LogMeetingScreen(meetingId: String? = null) {
             }
         }
         SnackbarHost(snackbar)
+    }
+
+    if (confirmSuggestions) {
+        AlertDialog(
+            onDismissRequest = { confirmSuggestions = false },
+            title = { Text(stringResource(R.string.save_with_suggestions)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmSuggestions = false
+                    viewModel.save()
+                }) { Text(stringResource(R.string.save)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmSuggestions = false }) { Text(stringResource(R.string.cancel)) }
+            },
+        )
+    }
+    if (askCancel) {
+        AlertDialog(
+            onDismissRequest = { askCancel = false },
+            title = { Text(stringResource(R.string.cancel_meeting)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    askCancel = false
+                    onLeave()
+                }) { Text(stringResource(R.string.ok)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { askCancel = false }) { Text(stringResource(R.string.cancel)) }
+            },
+        )
     }
 
     if (showDate) {
@@ -467,6 +517,96 @@ private fun ClothingPickRowCard(
             }
             TextButton(onClick = { viewModel.removeClothingRow(row.key) }) {
                 Text(stringResource(R.string.remove_row))
+            }
+        }
+    }
+}
+
+private val SuggestionGreen = Color(0xFF1B7F4E)
+
+@Composable
+private fun MatchedSuggestionCard(
+    item: com.galmerom.outfittracker.domain.model.ClothingItem,
+    categoryName: String,
+    meetingJpeg: ByteArray?,
+    existingUrl: String?,
+    onApprove: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        colors = appCardColors(),
+        elevation = appCardElevation(),
+        border = BorderStroke(4.dp, SuggestionGreen),
+    ) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                ClothingImage(
+                    jpeg = meetingJpeg,
+                    url = if (meetingJpeg == null) existingUrl else null,
+                    description = stringResource(R.string.meeting_photo_description),
+                    modifier = Modifier.size(96.dp),
+                )
+                ClothingImage(
+                    jpeg = null,
+                    url = item.photoUrl,
+                    description = item.description,
+                    modifier = Modifier.size(96.dp),
+                )
+                Column(Modifier.weight(1f)) {
+                    Text(item.description, style = MaterialTheme.typography.titleMedium)
+                    Text(categoryName, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                IconButton(onClick = onDismiss) {
+                    Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.dismiss_suggestion))
+                }
+            }
+            Button(onClick = onApprove, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.ai_use))
+            }
+        }
+    }
+}
+
+@Composable
+private fun UnmatchedSuggestionCard(
+    meetingJpeg: ByteArray?,
+    existingUrl: String?,
+    onOpen: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    Card(
+        onClick = onOpen,
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        colors = androidx.compose.material3.CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.errorContainer,
+            contentColor = MaterialTheme.colorScheme.onErrorContainer,
+        ),
+        border = BorderStroke(4.dp, MaterialTheme.colorScheme.error),
+    ) {
+        Row(
+            Modifier.padding(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ClothingImage(
+                jpeg = meetingJpeg,
+                url = if (meetingJpeg == null) existingUrl else null,
+                description = stringResource(R.string.meeting_photo_description),
+                modifier = Modifier.size(96.dp),
+            )
+            Text(
+                stringResource(R.string.ai_not_in_wardrobe),
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.titleMedium,
+            )
+            IconButton(onClick = onDismiss) {
+                Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.dismiss_suggestion))
             }
         }
     }

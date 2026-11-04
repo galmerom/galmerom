@@ -3,6 +3,7 @@ package com.galmerom.outfittracker.data.ai
 import android.util.Log
 import com.galmerom.outfittracker.data.photo.ImageCompressor
 import com.galmerom.outfittracker.domain.GarmentDetector
+import com.galmerom.outfittracker.domain.WardrobeDetection
 import com.galmerom.outfittracker.domain.logic.GarmentResponseParser
 import com.galmerom.outfittracker.domain.model.ClothingCategory
 import com.galmerom.outfittracker.domain.model.ClothingItem
@@ -27,14 +28,19 @@ class FirebaseAiGarmentDetector : GarmentDetector {
         jpeg: ByteArray,
         items: List<ClothingItem>,
         categories: List<ClothingCategory>,
-    ): Result<List<String>> {
-        if (items.isEmpty()) return Result.success(emptyList())
+    ): Result<WardrobeDetection> {
         val names = categories.associate { it.id to it.name }
         val allowed = items.map { it.id }.toSet()
+        val allowedCategories = categories.map { it.id }.toSet()
         return try {
             val thumbs = loadThumbs(items)
             val schema = Schema.obj(
-                mapOf("itemIds" to Schema.array(Schema.string())),
+                mapOf(
+                    "itemIds" to Schema.array(Schema.string()),
+                    "unmatched" to Schema.array(
+                        Schema.obj(mapOf("category" to Schema.string())),
+                    ),
+                ),
             )
             val model = Firebase.ai(backend = GenerativeBackend.googleAI())
                 .generativeModel(
@@ -48,7 +54,7 @@ class FirebaseAiGarmentDetector : GarmentDetector {
                 content {
                     text("תמונת המפגש, הפריטים שעליה צריך לזהות:")
                     inlineData(jpeg, "image/jpeg")
-                    text(prompt(items, names))
+                    text(prompt(items, categories, names))
                     items.forEach { item ->
                         text("פריט id=${item.id}")
                         thumbs[item.id]?.let { inlineData(it, "image/jpeg") }
@@ -59,9 +65,12 @@ class FirebaseAiGarmentDetector : GarmentDetector {
             if (text.isNullOrBlank()) {
                 return Result.failure(IllegalStateException("empty model response"))
             }
-            val ids = GarmentResponseParser.parseIds(text, allowed)
-            Log.i(TAG, "garment detection matched ${ids.size}")
-            Result.success(ids)
+            val detection = WardrobeDetection(
+                matchedIds = GarmentResponseParser.parseIds(text, allowed),
+                unmatchedCategories = GarmentResponseParser.parseUnmatched(text, allowedCategories),
+            )
+            Log.i(TAG, "garment detection matched ${detection.matchedIds.size}, unmatched ${detection.unmatchedCategories.size}")
+            Result.success(detection)
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Exception) {
@@ -89,16 +98,23 @@ class FirebaseAiGarmentDetector : GarmentDetector {
         }.getOrNull()
     }
 
-    private fun prompt(items: List<ClothingItem>, categoryNames: Map<String, String>): String {
+    private fun prompt(
+        items: List<ClothingItem>,
+        categories: List<ClothingCategory>,
+        categoryNames: Map<String, String>,
+    ): String {
         val catalog = items.joinToString("\n") { item ->
             val category = categoryNames[item.categoryId] ?: item.categoryId
             "- id=${item.id} | ${item.description} | $category"
-        }
+        }.ifBlank { "(הארון ריק)" }
+        val categoryCatalog = categories.joinToString("\n") { "- ${it.id}: ${it.name}" }.ifBlank { "(אין קטגוריות)" }
         return """
-            החזירי רק מזהים של פריטים מהרשימה שנראים על האדם בתמונת המפגש.
-            אל תמציאי פריטים חדשים ואל תחזירי תיאור.
-            אם שני פריטים דומים ושניהם אפשריים, החזירי את שני המזהים.
-            JSON בלבד: {"itemIds":["..."]}
+            החזירי JSON בלבד בלי שמות ובלי תיאור חופשי.
+            itemIds: רק מזהים מהארון שנראים על האדם. אם שני פריטים דומים ושניהם אפשריים, החזירי את שניהם.
+            unmatched: פריט לבוש שנראה בתמונה ואין לו התאמה בארון. לכל פריט כזה אובייקט עם category בלבד, מזהה מהקטגוריות, או מחרוזת ריקה אם הקטגוריה לא ברורה.
+            אל תמציאי פריט ארון חדש בתוך itemIds.
+            קטגוריות:
+            $categoryCatalog
             פריטים קיימים בארון:
             $catalog
         """.trimIndent()

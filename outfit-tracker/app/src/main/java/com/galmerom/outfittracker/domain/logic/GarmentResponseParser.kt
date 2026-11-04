@@ -28,12 +28,39 @@ object GarmentResponseParser {
         return ids
     }
 
-    private fun arrayBody(raw: String): String? {
-        val keyed = listOf("\"itemIds\"", "\"garments\"").firstNotNullOfOrNull { key ->
-            val at = raw.indexOf(key)
-            if (at < 0) null else raw.indexOf('[', at).takeIf { it >= 0 }
+    fun parseUnmatched(raw: String, allowedCategoryIds: Set<String>): List<String?> {
+        val body = arrayBody(raw, "unmatched") ?: return emptyList()
+        val objects = splitObjects(body)
+        if (objects.isNotEmpty()) {
+            return objects.map { objectText ->
+                stringFields(objectText)["category"]?.trim()?.takeIf { it in allowedCategoryIds }
+            }
         }
-        val start = keyed ?: raw.indexOf('[')
+        val ids = mutableListOf<String?>()
+        var index = 0
+        while (index < body.length) {
+            if (body[index] != '"') {
+                index++
+                continue
+            }
+            val value = readString(body, index) ?: break
+            ids += value.first.takeIf { it in allowedCategoryIds }
+            index = value.second
+        }
+        return ids
+    }
+
+    private fun arrayBody(raw: String, key: String? = null): String? {
+        val keyed = if (key != null) {
+            val at = raw.indexOf("\"$key\"")
+            if (at < 0) null else raw.indexOf('[', at).takeIf { it >= 0 }
+        } else {
+            listOf("\"itemIds\"", "\"garments\"").firstNotNullOfOrNull { name ->
+                val at = raw.indexOf(name)
+                if (at < 0) null else raw.indexOf('[', at).takeIf { it >= 0 }
+            }
+        }
+        val start = keyed ?: if (key == null) raw.indexOf('[') else -1
         if (start < 0) return null
         val end = matchingBracket(raw, start) ?: return null
         if (end <= start) return null

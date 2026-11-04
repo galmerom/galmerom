@@ -122,6 +122,11 @@
     <string name="meeting_need_entity">צריך לבחור %1$s.</string>
     <string name="meeting_need_clothes">צריך לבחור לפחות פריט לבוש אחד.</string>
     <string name="meeting_saved">המפגש נשמר</string>
+    <string name="meeting_saved_home">הפגישה נשמרה</string>
+    <string name="ai_not_in_wardrobe">לא נמצא בארון</string>
+    <string name="dismiss_suggestion">הסרת הצעה</string>
+    <string name="save_with_suggestions">יש פריטים מוצעים שלא אושרו, לשמור בכל זאת?</string>
+    <string name="cancel_meeting">לבטל את הפגישה?</string>
 
     <string name="search_hint">חיפוש לפי %1$s</string>
     <string name="show_more">הצג עוד</string>

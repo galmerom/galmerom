@@ -16,6 +16,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -105,7 +106,14 @@ fun EntityListScreen(
                 ),
                 title = { Text(stringResource(R.string.entities_title)) },
                 actions = {
-                    TextButton(onClick = onHome) { Text(stringResource(R.string.back_home)) }
+                    Button(
+                        onClick = onHome,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary,
+                        ),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                    ) { Text(stringResource(R.string.back_home)) }
                 },
             )
         },

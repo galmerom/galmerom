@@ -112,6 +112,19 @@ class DomainLogicTest {
             setOf("shirt-a", "shirt-b"),
         )
         assertEquals(listOf("shirt-a", "shirt-b"), ids)
+        val unmatched = GarmentResponseParser.parseUnmatched(
+            """{"itemIds":["a"],"unmatched":[{"category":"shirt"},{"category":"nope"},{"category":""}]}""",
+            setOf("shirt", "pants"),
+        )
+        assertEquals(listOf("shirt", null, null), unmatched)
+    }
+
+    @Test
+    fun meetingForm_isDirtyWhenAnythingWasEntered() {
+        val empty = com.galmerom.outfittracker.ui.meeting.LogMeetingUiState()
+        assertFalse(empty.hasEnteredData(java.time.LocalDate.now()))
+        assertTrue(empty.copy(note = "הערה").hasEnteredData())
+        assertTrue(empty.copy(editingId = "m").hasEnteredData())
     }
 
     @Test
