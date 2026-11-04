@@ -90,23 +90,16 @@ class FirestoreClothingRepository(
         val uid = auth.currentUser?.uid ?: return Result.failure(IllegalStateException("signed out"))
         val id = item.id.ifBlank { firestore.collection("users").document().id }
         var photoUrl = item.photoUrl
-        var outcome = SaveOutcome.SAVED
         if (photoJpeg != null) {
             val uploaded = runCatching { photos.upload("users/$uid/clothing/$id.jpg", photoJpeg) }
-            if (uploaded.isSuccess) {
-                photoUrl = uploaded.getOrThrow()
-            } else {
-                val error = uploaded.exceptionOrNull()
-                if (error?.errorKind() == ErrorKind.PERMISSION) return Result.failure(error)
-                outcome = SaveOutcome.SAVED_WITHOUT_PHOTO
-            }
+            photoUrl = uploaded.getOrElse { return Result.failure(it) }
         }
         val saved = item.copy(id = id, description = item.description.trim(), photoUrl = photoUrl)
         return firestore.userCollection(uid, CLOTHING)
             .document(id)
             .set(saved.toMap())
             .awaitCommitted()
-            .map { saved to outcome }
+            .map { saved to SaveOutcome.SAVED }
     }
 
     override suspend fun setHidden(id: String, hidden: Boolean): Result<Unit> {

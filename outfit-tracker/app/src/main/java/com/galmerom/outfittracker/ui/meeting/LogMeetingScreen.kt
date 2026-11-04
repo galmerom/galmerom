@@ -211,50 +211,59 @@ fun LogMeetingScreen(meetingId: String? = null) {
                 }
             }
 
-            SectionTitle(stringResource(R.string.ai_section))
-            Text(
-                stringResource(R.string.ai_help),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            SectionTitle(stringResource(R.string.ai_section), prominent = true)
             DetectionBlock(
                 jpeg = state.meetingPhoto,
                 existingUrl = state.existingPhotoUrl,
                 detecting = state.detecting,
-                detectedCount = state.detectedCount,
-                detectionError = state.detectionError,
+                notice = state.detectionNotice,
                 onPhoto = viewModel::onOutfitPhoto,
                 onDetect = viewModel::detect,
                 onDenied = { viewModel.notify(UserMessage.CAMERA_PERMISSION) },
                 onFailure = { viewModel.notify(UserMessage.GENERIC) },
             )
-            state.aiSuggestions.forEachIndexed { index, suggestion ->
-                val categoryName = state.categories.firstOrNull { it.id == suggestion.garment.categoryId }?.name
-                    ?: suggestion.garment.categoryId
+            state.aiSuggestions.forEach { suggestion ->
+                val item = state.wardrobe.firstOrNull { it.id == suggestion.itemId } ?: return@forEach
+                val categoryName = state.categories.firstOrNull { it.id == item.categoryId }?.name ?: item.categoryId
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = MaterialTheme.shapes.medium,
                     colors = appCardColors(),
                     elevation = appCardElevation(),
                 ) {
-                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(suggestion.garment.description)
-                        Text(categoryName, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        val match = suggestion.match
-                        Text(
-                            if (match != null) {
-                                stringResource(R.string.ai_match, match.description)
-                            } else {
-                                stringResource(R.string.ai_new)
-                            },
-                        )
-                        TextButton(onClick = { viewModel.acceptSuggestion(index) }) {
+                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            ClothingImage(
+                                jpeg = state.meetingPhoto,
+                                url = if (state.meetingPhoto == null) state.existingPhotoUrl else null,
+                                description = stringResource(R.string.meeting_photo_description),
+                                modifier = Modifier.size(96.dp),
+                            )
+                            ClothingImage(
+                                jpeg = null,
+                                url = item.photoUrl,
+                                description = item.description,
+                                modifier = Modifier.size(96.dp),
+                            )
+                            Column(Modifier.weight(1f)) {
+                                Text(item.description, style = MaterialTheme.typography.titleMedium)
+                                Text(categoryName, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        Button(
+                            onClick = { viewModel.acceptSuggestion(item.id) },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
                             Text(stringResource(R.string.ai_use))
                         }
                     }
                 }
             }
 
-            SectionTitle(stringResource(R.string.clothes_section))
+            SectionTitle(stringResource(R.string.clothes_section), prominent = true)
             state.rows.forEach { row ->
                 ClothingPickRowCard(
                     state = state,
@@ -468,8 +477,7 @@ private fun DetectionBlock(
     jpeg: ByteArray?,
     existingUrl: String?,
     detecting: Boolean,
-    detectedCount: Int?,
-    detectionError: String?,
+    notice: DetectionNotice,
     onPhoto: (ByteArray) -> Unit,
     onDetect: () -> Unit,
     onDenied: () -> Unit,
@@ -491,15 +499,15 @@ private fun DetectionBlock(
             CircularProgressIndicator(Modifier.size(22.dp))
             Text(stringResource(R.string.ai_detecting), style = MaterialTheme.typography.titleMedium)
         }
-        detectionError != null -> Text(
-            stringResource(R.string.ai_failed_reason, detectionError),
+        notice == DetectionNotice.Failed -> Text(
+            stringResource(R.string.ai_google_error),
             color = MaterialTheme.colorScheme.error,
             style = MaterialTheme.typography.bodyLarge,
         )
-        detectedCount != null -> Text(
-            stringResource(R.string.ai_detected_count, detectedCount),
-            color = MaterialTheme.colorScheme.primary,
-            style = MaterialTheme.typography.titleMedium,
+        notice == DetectionNotice.NoMatch -> Text(
+            stringResource(R.string.ai_no_match),
+            color = MaterialTheme.colorScheme.onSurface,
+            style = MaterialTheme.typography.bodyLarge,
         )
     }
     Button(onClick = onDetect, enabled = jpeg != null && !detecting) {
@@ -542,6 +550,7 @@ private fun ManualItemDialog(
     var description by remember { mutableStateOf("") }
     var categoryId by remember(categories) { mutableStateOf(categories.firstOrNull()?.id.orEmpty()) }
     var photo by remember { mutableStateOf<ByteArray?>(null) }
+    var confirmMissing by remember { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.clothes_manual_title)) },
@@ -569,7 +578,9 @@ private fun ManualItemDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = { onSave(description, categoryId, photo) }) {
+            TextButton(onClick = {
+                if (photo == null) confirmMissing = true else onSave(description, categoryId, photo)
+            }) {
                 Text(stringResource(R.string.save))
             }
         },
@@ -577,4 +588,20 @@ private fun ManualItemDialog(
             TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
         },
     )
+    if (confirmMissing) {
+        AlertDialog(
+            onDismissRequest = { confirmMissing = false },
+            title = { Text(stringResource(R.string.clothing_no_photo_title)) },
+            text = { Text(stringResource(R.string.clothing_no_photo_body)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmMissing = false
+                    onSave(description, categoryId, null)
+                }) { Text(stringResource(R.string.clothing_no_photo_save)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmMissing = false }) { Text(stringResource(R.string.cancel)) }
+            },
+        )
+    }
 }

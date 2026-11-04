@@ -2,8 +2,10 @@ package com.galmerom.outfittracker.ui.common
 
 import android.Manifest
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.provider.MediaStore
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.PickVisualMediaRequest
@@ -18,9 +20,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -52,10 +56,16 @@ fun rememberPhotoActions(
 ): PhotoActions {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val cameraUri = remember { mutableStateOf<Uri?>(null) }
+    // The camera activity, especially the front camera, often recreates this screen.
+    // The output URI has to survive that, or the picture is thrown away before it can be saved.
+    var cameraUriString by rememberSaveable { mutableStateOf<String?>(null) }
     val takePicture = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
-        val uri = cameraUri.value
-        if (!success || uri == null) return@rememberLauncherForActivityResult
+        val uri = cameraUriString?.let(Uri::parse)
+        if (!success) return@rememberLauncherForActivityResult
+        if (uri == null) {
+            onFailure()
+            return@rememberLauncherForActivityResult
+        }
         scope.launch {
             runCatching { context.readCompressedJpeg(uri, maxEdge) }
                 .onSuccess(onJpeg)
@@ -64,7 +74,7 @@ fun rememberPhotoActions(
     }
     val requestCamera = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) {
-            launchCamera(context, takePicture) { cameraUri.value = it }
+            cameraUriString = launchCamera(context, takePicture)
         } else {
             onDenied()
         }
@@ -82,7 +92,7 @@ fun rememberPhotoActions(
             val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
                 PackageManager.PERMISSION_GRANTED
             if (granted) {
-                launchCamera(context, takePicture) { cameraUri.value = it }
+                cameraUriString = launchCamera(context, takePicture)
             } else {
                 requestCamera.launch(Manifest.permission.CAMERA)
             }
@@ -147,11 +157,17 @@ fun EntityAvatar(
 private fun launchCamera(
     context: Context,
     launcher: ActivityResultLauncher<Uri>,
-    onUri: (Uri) -> Unit,
-) {
+): String {
     val directory = File(context.cacheDir, "camera").apply { mkdirs() }
     val file = File(directory, "${UUID.randomUUID()}.jpg")
+    file.createNewFile()
     val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-    onUri(uri)
+    val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+    val capture = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
+    val handlers = context.packageManager.queryIntentActivities(capture, PackageManager.MATCH_DEFAULT_ONLY)
+    for (handler in handlers) {
+        context.grantUriPermission(handler.activityInfo.packageName, uri, flags)
+    }
     launcher.launch(uri)
+    return uri.toString()
 }

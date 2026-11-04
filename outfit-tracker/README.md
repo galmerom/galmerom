@@ -15,7 +15,7 @@ Each signed-in user has their own data under `users/{uid}/`:
 
 Photos are downscaled on the phone to about 1280px JPEG, then uploaded to Cloud Storage at `users/{uid}/…`. Sign-in is Firebase Auth with the user's Google account through Credential Manager, so the wardrobe survives replacing the phone. Firestore disk persistence is turned on and syncs when the network is back.
 
-Garment detection goes through `GarmentDetector`. The implementation calls Gemini with Firebase AI Logic (`firebase-ai`, model `gemini-3.8-flash`, Gemini Developer API). The meeting photo is saved with the meeting even when detection fails, and the screen shows a Hebrew error with the short reason. Debug builds install the App Check debug provider. A call still fails until the Firebase project has Gemini credit and, if App Check is enforced, the debug token from the error (or logcat tag `OutfitTracker`) is registered under App Check.
+Garment detection goes through `GarmentDetector`. It sends the meeting photo and the existing wardrobe to Gemini (`gemini-3.8-flash`) and only suggests ids of items already in the wardrobe. Nothing is added until it is approved. The meeting photo is still saved with the meeting. A failed call shows a fixed Hebrew message. Debug builds install the App Check debug provider. Detection still fails until the Firebase project has Gemini credit.
 
 `app/google-services.json` is committed for this personal debug app. The Google Services plugin still applies only when that file exists, so a checkout without it still builds and shows a setup message instead of crashing. When the file is present, sign-in uses the generated string `default_web_client_id` (the OAuth web client, `client_type` 3).
 

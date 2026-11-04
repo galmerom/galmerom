@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import com.galmerom.outfittracker.R
 import androidx.compose.ui.unit.dp
@@ -61,7 +62,7 @@ fun ClearTextButton(visible: Boolean, onClear: () -> Unit) {
 }
 
 @Composable
-fun SectionTitle(text: String, modifier: Modifier = Modifier) {
+fun SectionTitle(text: String, modifier: Modifier = Modifier, prominent: Boolean = false) {
     Row(
         modifier = modifier,
         verticalAlignment = Alignment.CenterVertically,
@@ -69,11 +70,15 @@ fun SectionTitle(text: String, modifier: Modifier = Modifier) {
     ) {
         Box(
             Modifier
-                .size(width = 3.dp, height = 18.dp)
+                .size(width = 3.dp, height = if (prominent) 24.dp else 18.dp)
                 .clip(RoundedCornerShape(2.dp))
                 .background(MaterialTheme.colorScheme.primary),
         )
-        Text(text = text, style = MaterialTheme.typography.titleMedium)
+        Text(
+            text = text,
+            style = if (prominent) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+        )
     }
 }
 

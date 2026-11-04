@@ -89,7 +89,7 @@ class AppContainer(context: Context) {
                 AppCheckInstaller.install(appContext)
                 meetingRepository = FirestoreMeetingRepository(firestore, auth, photos)
                 categoryRepository = FirestoreCategoryRepository(firestore, auth)
-                detector = FirebaseAiGarmentDetector { AppCheckInstaller.currentSecret(appContext) }
+                detector = FirebaseAiGarmentDetector()
                 auth.addAuthStateListener { firebaseAuth ->
                     if (firebaseAuth.currentUser != null) {
                         preferences.startAccountSync(firestore, auth)

@@ -9,7 +9,6 @@ import com.galmerom.outfittracker.domain.logic.RepeatWarnings
 import com.galmerom.outfittracker.domain.logic.meetingCounts
 import com.galmerom.outfittracker.domain.model.ClothingCategory
 import com.galmerom.outfittracker.domain.model.ClothingItem
-import com.galmerom.outfittracker.domain.model.DetectedGarment
 import com.galmerom.outfittracker.domain.model.Entity
 import com.galmerom.outfittracker.domain.model.EntityType
 import com.galmerom.outfittracker.domain.model.Meeting
@@ -31,9 +30,14 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+enum class DetectionNotice {
+    None,
+    NoMatch,
+    Failed,
+}
+
 data class AiSuggestion(
-    val garment: DetectedGarment,
-    val match: ClothingItem?,
+    val itemId: String,
 )
 
 data class ClothingPickRow(
@@ -61,8 +65,7 @@ data class LogMeetingUiState(
     val meetingPhoto: ByteArray? = null,
     val aiSuggestions: List<AiSuggestion> = emptyList(),
     val detecting: Boolean = false,
-    val detectedCount: Int? = null,
-    val detectionError: String? = null,
+    val detectionNotice: DetectionNotice = DetectionNotice.None,
     val saving: Boolean = false,
     val creatingEntity: Boolean = false,
 ) {
@@ -191,8 +194,7 @@ class LogMeetingViewModel(
             it.copy(
                 meetingPhoto = jpeg,
                 aiSuggestions = emptyList(),
-                detectedCount = null,
-                detectionError = null,
+                detectionNotice = DetectionNotice.None,
             )
         }
         detect()
@@ -269,28 +271,25 @@ class LogMeetingViewModel(
     fun detect() {
         val jpeg = _state.value.meetingPhoto ?: return
         if (_state.value.detecting) return
+        val known = WardrobeRules.selectable(_state.value.wardrobe)
+        if (known.isEmpty()) return
         viewModelScope.launch {
-            _state.update { it.copy(detecting = true, detectionError = null) }
-            detector.detect(jpeg, _state.value.categories).fold(
-                onSuccess = { garments ->
-                    val wardrobe = _state.value.wardrobe
+            _state.update { it.copy(detecting = true, detectionNotice = DetectionNotice.None) }
+            detector.detect(jpeg, known, _state.value.categories).fold(
+                onSuccess = { ids ->
                     _state.update {
                         it.copy(
                             detecting = false,
-                            detectedCount = garments.size,
-                            detectionError = null,
-                            aiSuggestions = garments.map { garment ->
-                                AiSuggestion(garment, WardrobeRules.match(garment, wardrobe))
-                            },
+                            detectionNotice = if (ids.isEmpty()) DetectionNotice.NoMatch else DetectionNotice.None,
+                            aiSuggestions = ids.map { id -> AiSuggestion(id) },
                         )
                     }
                 },
-                onFailure = { error ->
+                onFailure = {
                     _state.update {
                         it.copy(
                             detecting = false,
-                            detectedCount = null,
-                            detectionError = error.message?.takeIf { it.isNotBlank() } ?: "שגיאה לא ידועה",
+                            detectionNotice = DetectionNotice.Failed,
                             aiSuggestions = emptyList(),
                         )
                     }
@@ -299,34 +298,13 @@ class LogMeetingViewModel(
         }
     }
 
-    fun acceptSuggestion(index: Int) {
-        val suggestion = _state.value.aiSuggestions.getOrNull(index) ?: return
-        viewModelScope.launch {
-            val existing = suggestion.match
-            val item = if (existing != null) {
-                existing
-            } else {
-                val created = clothing.upsert(
-                    ClothingItem(
-                        id = "",
-                        description = suggestion.garment.description,
-                        categoryId = suggestion.garment.categoryId,
-                        photoUrl = null,
-                        hidden = false,
-                    ),
-                    photoJpeg = null,
-                ).getOrElse {
-                    report(it.toUserMessage())
-                    return@launch
-                }
-                created.first
-            }
-            _state.update { state ->
-                state.copy(
-                    aiSelectedIds = state.aiSelectedIds + item.id,
-                    aiSuggestions = state.aiSuggestions.filterIndexed { suggestionIndex, _ -> suggestionIndex != index },
-                ).syncSelection()
-            }
+    fun acceptSuggestion(itemId: String) {
+        if (_state.value.wardrobe.none { it.id == itemId }) return
+        _state.update { state ->
+            state.copy(
+                aiSelectedIds = state.aiSelectedIds + itemId,
+                aiSuggestions = state.aiSuggestions.filterNot { it.itemId == itemId },
+            ).syncSelection()
         }
     }
 

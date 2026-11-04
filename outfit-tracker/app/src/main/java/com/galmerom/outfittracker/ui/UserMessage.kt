@@ -13,8 +13,6 @@ enum class UserMessage {
     NEED_ENTITY,
     NEED_CLOTHES,
     NEED_DESCRIPTION,
-    AI_FAILED,
-    AI_EMPTY,
     CLOTHING_SAVED,
     SAVED,
     NEED_NAME,
@@ -35,8 +33,6 @@ fun Context.textFor(message: UserMessage): String = when (message) {
     UserMessage.NEED_ENTITY -> getString(R.string.meeting_need_entity, getString(R.string.entity_label))
     UserMessage.NEED_CLOTHES -> getString(R.string.meeting_need_clothes)
     UserMessage.NEED_DESCRIPTION -> getString(R.string.clothing_description_required)
-    UserMessage.AI_FAILED -> getString(R.string.ai_failed)
-    UserMessage.AI_EMPTY -> getString(R.string.ai_empty)
     UserMessage.CLOTHING_SAVED -> getString(R.string.clothing_saved)
     UserMessage.SAVED -> getString(R.string.saved)
     UserMessage.NEED_NAME -> getString(R.string.entity_name_required)

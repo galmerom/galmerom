@@ -12,9 +12,28 @@ object GarmentResponseParser {
         return splitObjects(arrayBody).mapNotNull { parseObject(it, allowedCategoryIds, categoryNames) }
     }
 
+    fun parseIds(raw: String, allowedIds: Set<String>): List<String> {
+        val body = arrayBody(raw) ?: return emptyList()
+        val ids = mutableListOf<String>()
+        var index = 0
+        while (index < body.length) {
+            if (body[index] != '"') {
+                index++
+                continue
+            }
+            val value = readString(body, index) ?: break
+            if (value.first in allowedIds && value.first !in ids) ids += value.first
+            index = value.second
+        }
+        return ids
+    }
+
     private fun arrayBody(raw: String): String? {
-        val garments = raw.indexOf("\"garments\"")
-        val start = if (garments >= 0) raw.indexOf('[', garments) else raw.indexOf('[')
+        val keyed = listOf("\"itemIds\"", "\"garments\"").firstNotNullOfOrNull { key ->
+            val at = raw.indexOf(key)
+            if (at < 0) null else raw.indexOf('[', at).takeIf { it >= 0 }
+        }
+        val start = keyed ?: raw.indexOf('[')
         if (start < 0) return null
         val end = matchingBracket(raw, start) ?: return null
         if (end <= start) return null

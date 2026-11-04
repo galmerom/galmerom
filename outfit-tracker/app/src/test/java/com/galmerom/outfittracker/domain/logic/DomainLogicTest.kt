@@ -1,5 +1,6 @@
 package com.galmerom.outfittracker.domain.logic
 
+import com.galmerom.outfittracker.data.photo.isJpeg
 import com.galmerom.outfittracker.domain.model.ClothingCategory
 import com.galmerom.outfittracker.domain.model.ClothingItem
 import com.galmerom.outfittracker.domain.model.DetectedGarment
@@ -106,6 +107,17 @@ class DomainLogicTest {
         val parsed = GarmentResponseParser.parse(raw, setOf("shirt", "pants", "shoes"))
         assertEquals(listOf(DetectedGarment("shirt", "חולצה לבנה")), parsed)
         assertTrue(GarmentResponseParser.parse("no json").isEmpty())
+        val ids = GarmentResponseParser.parseIds(
+            """{"itemIds":["shirt-a","shirt-b","missing"]}""",
+            setOf("shirt-a", "shirt-b"),
+        )
+        assertEquals(listOf("shirt-a", "shirt-b"), ids)
+    }
+
+    @Test
+    fun jpegMagic_requiresTheJpegHeader() {
+        assertTrue(byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0).isJpeg())
+        assertFalse(byteArrayOf(0x00, 0x01, 0x02).isJpeg())
         val wrapped = """{"garments":[{"category":"חולצה","description":"חולצה לבנה ] עם פס"},{"category":"pants","description":"מכנסיים כהים"}]}"""
         assertEquals(
             listOf(
