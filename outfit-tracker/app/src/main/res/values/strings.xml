@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">מעקב תלבושות</string>
+    <string name="hello">שלום</string>
+    <!-- UI label for a person or forum. Rename this resource later; do not hard-code the label. -->
+    <string name="entity_label">איש/פורום</string>
+</resources>
