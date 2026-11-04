@@ -30,7 +30,9 @@ Build and install a debug APK:
 ./gradlew assembleDebug
 ```
 
-The debug APK from GitHub Actions is the artifact `outfit-tracker-debug-apk` on the workflow run.
+The debug APK from GitHub Actions is the artifact `outfit-tracker-debug-apk` on the workflow run. Each push also replaces the pre-release tag `outfit-tracker-latest`:
+
+https://github.com/galmerom/galmerom/releases/download/outfit-tracker-latest/outfit-tracker.apk
 
 ## App
 
