@@ -63,8 +63,11 @@ class CallCountsTest {
     fun whatsAppDigits_andDialableNumbers() {
         assertEquals("972501234567", whatsAppDigits("972501234567@s.whatsapp.net"))
         assertEquals("972501234567", whatsAppDigits("050-123-4567"))
+        assertEquals("972501234567", whatsAppDigits("00972 50-123-4567"))
         assertEquals("97235551234", whatsAppDigits("+972 3-555-1234"))
         assertNull(whatsAppDigits("   "))
+        assertNull(whatsAppDigits("שרון"))
+        assertNull(whatsAppDigits("שרון אישתי"))
         assertEquals("+972501234567", dialableNumber(" +972 (50) 123-4567 "))
         assertEquals("*123#", dialableNumber(" *123# "))
     }

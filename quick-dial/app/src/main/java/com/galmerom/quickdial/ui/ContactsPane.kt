@@ -2,8 +2,10 @@ package com.galmerom.quickdial.ui
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -13,6 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -131,20 +134,45 @@ fun NumberDialog(prompt: NumberPrompt, onDismiss: () -> Unit, onConfirm: (Int) -
 }
 
 @Composable
-fun RenameDialog(prompt: RenamePrompt, onDismiss: () -> Unit, onSave: (String) -> Unit) {
+fun RenameDialog(
+    prompt: RenamePrompt,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit,
+    onGallery: () -> Unit,
+    onCamera: () -> Unit,
+    onRestorePhoto: () -> Unit,
+) {
     var text by remember(prompt.rowId, prompt.initial) { mutableStateOf(prompt.initial) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.edit_short_name), style = MaterialTheme.typography.headlineSmall) },
         text = {
-            OutlinedTextField(
-                value = text,
-                onValueChange = { text = it.take(24) },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                textStyle = MaterialTheme.typography.titleLarge,
-                label = { Text(stringResource(R.string.short_name)) },
-            )
+            Column {
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it.take(24) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.titleLarge,
+                    label = { Text(stringResource(R.string.short_name)) },
+                )
+                Spacer(Modifier.height(16.dp))
+                Text(stringResource(R.string.photo_section), style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(8.dp))
+                Button(onClick = onGallery, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
+                    Text(stringResource(R.string.photo_gallery), style = MaterialTheme.typography.titleMedium)
+                }
+                Spacer(Modifier.height(8.dp))
+                Button(onClick = onCamera, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
+                    Text(stringResource(R.string.photo_camera), style = MaterialTheme.typography.titleMedium)
+                }
+                if (prompt.hasCustomPhoto) {
+                    Spacer(Modifier.height(8.dp))
+                    TextButton(onClick = onRestorePhoto, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
+                        Text(stringResource(R.string.photo_restore), style = MaterialTheme.typography.titleMedium)
+                    }
+                }
+            }
         },
         confirmButton = {
             TextButton(onClick = { onSave(text) }, enabled = text.isNotBlank()) {

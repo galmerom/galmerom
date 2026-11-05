@@ -23,6 +23,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -49,6 +50,7 @@ import com.galmerom.quickdial.domain.letterFontSp
 import com.galmerom.quickdial.domain.shortNameFontSp
 import com.galmerom.quickdial.domain.tileHeightDp
 import com.galmerom.quickdial.ui.theme.AvatarPalette
+import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -114,6 +116,11 @@ private fun VoiceButton(listening: Boolean, onClick: () -> Unit) {
             text = stringResource(if (listening) R.string.voice_listening else R.string.voice_idle),
             style = MaterialTheme.typography.titleLarge,
             textAlign = TextAlign.Center,
+        )
+    }
+    if (listening) {
+        LinearProgressIndicator(
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
         )
     }
 }
@@ -270,8 +277,13 @@ private fun ContactAvatar(
                 null
             } else {
                 runCatching {
-                    context.contentResolver.openInputStream(Uri.parse(photoUri))?.use { stream ->
-                        BitmapFactory.decodeStream(stream)
+                    val parsed = Uri.parse(photoUri)
+                    if (parsed.scheme == "file") {
+                        BitmapFactory.decodeFile(parsed.path ?: File(photoUri).path)
+                    } else {
+                        context.contentResolver.openInputStream(parsed)?.use { stream ->
+                            BitmapFactory.decodeStream(stream)
+                        }
                     }
                 }.getOrNull()
             }

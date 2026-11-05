@@ -35,6 +35,7 @@ data class SavedContact(
     val shortName: String,
     val phoneNumber: String,
     val addedAt: Long,
+    val customPhotoFile: String? = null,
 )
 
 @Serializable

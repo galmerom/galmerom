@@ -141,6 +141,8 @@ private fun NoticeKind.titleRes(): Int = when (this) {
     NoticeKind.MicDenied -> R.string.mic_denied_title
     NoticeKind.CallDenied -> R.string.call_denied_title
     NoticeKind.ContactsDenied -> R.string.contacts_denied_title
+    NoticeKind.CameraDenied -> R.string.camera_denied_title
+    NoticeKind.PhotoFailed -> R.string.photo_failed_title
 }
 
 private fun NoticeKind.bodyRes(): Int = when (this) {
@@ -154,7 +156,12 @@ private fun NoticeKind.bodyRes(): Int = when (this) {
     NoticeKind.MicDenied -> R.string.mic_denied_body
     NoticeKind.CallDenied -> R.string.call_denied_body
     NoticeKind.ContactsDenied -> R.string.contacts_denied_body
+    NoticeKind.CameraDenied -> R.string.camera_denied_body
+    NoticeKind.PhotoFailed -> R.string.photo_failed_body
 }
 
 private val NoticeKind.offersSettings: Boolean
-    get() = this == NoticeKind.MicDenied || this == NoticeKind.CallDenied || this == NoticeKind.ContactsDenied
+    get() = this == NoticeKind.MicDenied ||
+        this == NoticeKind.CallDenied ||
+        this == NoticeKind.ContactsDenied ||
+        this == NoticeKind.CameraDenied

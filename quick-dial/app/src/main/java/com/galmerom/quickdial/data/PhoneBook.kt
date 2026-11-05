@@ -24,10 +24,20 @@ data class DeviceContact(
     val phones: List<DevicePhone>,
 )
 
-data class WhatsAppLink(
-    val digits: String,
-    val packageName: String,
-)
+sealed interface WhatsAppTarget {
+    /** The contact's own WhatsApp row. Open this URI; do not search by name. */
+    data class Profile(
+        val dataUri: String,
+        val mimeType: String,
+        val packageName: String,
+    ) : WhatsAppTarget
+
+    /** No WhatsApp row. Open wa.me with the selected number, already in international digits. */
+    data class Phone(
+        val digits: String,
+        val packageName: String,
+    ) : WhatsAppTarget
+}
 
 class PhoneBook(private val context: Context) {
     fun loadAll(): List<DeviceContact> {
@@ -94,28 +104,37 @@ class PhoneBook(private val context: Context) {
         return grouped.values.map { it.build() }
     }
 
-    fun findWhatsApp(contactId: Long, lookupKey: String, fallbackNumber: String): WhatsAppLink? {
-        val resolvedId = resolveContactId(contactId, lookupKey) ?: return null
+    fun findWhatsApp(contactId: Long, lookupKey: String, fallbackNumber: String): WhatsAppTarget? {
+        val resolvedId = resolveContactId(contactId, lookupKey) ?: contactId
         val selection = "${Data.CONTACT_ID}=? AND ${Data.MIMETYPE} IN (?, ?)"
         val args = arrayOf(resolvedId.toString(), WHATSAPP, WHATSAPP_BUSINESS)
+        var business: WhatsAppTarget.Profile? = null
         context.contentResolver.query(
             Data.CONTENT_URI,
-            arrayOf(Data.MIMETYPE, Data.DATA1),
+            arrayOf(Data._ID, Data.MIMETYPE),
             selection,
             args,
             null,
         )?.use { cursor ->
+            val idIndex = cursor.getColumnIndex(Data._ID)
             val mimeIndex = cursor.getColumnIndex(Data.MIMETYPE)
-            val dataIndex = cursor.getColumnIndex(Data.DATA1)
             while (cursor.moveToNext()) {
+                if (idIndex < 0) continue
                 val mime = cursor.getStringOrNull(mimeIndex) ?: continue
-                val raw = cursor.getStringOrNull(dataIndex)
-                val digits = raw?.let(::whatsAppDigits) ?: whatsAppDigits(fallbackNumber) ?: continue
-                val packageName = if (mime == WHATSAPP_BUSINESS) "com.whatsapp.w4b" else "com.whatsapp"
-                return WhatsAppLink(digits, packageName)
+                val rowId = cursor.getLong(idIndex)
+                val uri = ContentUris.withAppendedId(Data.CONTENT_URI, rowId).toString()
+                val profile = if (mime == WHATSAPP_BUSINESS) {
+                    WhatsAppTarget.Profile(uri, mime, "com.whatsapp.w4b")
+                } else {
+                    WhatsAppTarget.Profile(uri, WHATSAPP, "com.whatsapp")
+                }
+                if (mime == WHATSAPP) return profile
+                business = profile
             }
         }
-        return null
+        business?.let { return it }
+        val digits = whatsAppDigits(fallbackNumber) ?: return null
+        return WhatsAppTarget.Phone(digits, "com.whatsapp")
     }
 
     private fun resolveContactId(contactId: Long, lookupKey: String): Long? {

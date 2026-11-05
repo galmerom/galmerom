@@ -75,6 +75,7 @@ import com.galmerom.quickdial.domain.DialTheme
 import com.galmerom.quickdial.domain.ShortNameSize
 import com.galmerom.quickdial.domain.TILE_RATIO_MAX
 import com.galmerom.quickdial.domain.TILE_RATIO_MIN
+import com.galmerom.quickdial.data.WhatsAppTarget
 import com.galmerom.quickdial.domain.dialableNumber
 import com.galmerom.quickdial.ui.theme.LocalDialTheme
 import com.galmerom.quickdial.ui.theme.QuickDialTheme
@@ -109,9 +110,23 @@ fun QuickDialApp(viewModel: QuickDialViewModel = viewModel()) {
     LaunchedEffect(Unit) {
         viewModel.notices.collect { notice = it }
     }
+    val photoActions = rememberTilePhotoActions(
+        onSaved = viewModel::setCustomPhoto,
+        onFailure = { viewModel.notify(NoticeKind.PhotoFailed) },
+        onDenied = { viewModel.notify(NoticeKind.CameraDenied) },
+    )
     LaunchedEffect(Unit) {
-        viewModel.whatsApp.collect { link ->
-            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/${link.digits}")).setPackage(link.packageName)
+        viewModel.whatsApp.collect { target ->
+            val intent = when (target) {
+                is WhatsAppTarget.Profile -> Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(Uri.parse(target.dataUri), target.mimeType)
+                    setPackage(target.packageName)
+                }
+                is WhatsAppTarget.Phone -> Intent(
+                    Intent.ACTION_VIEW,
+                    Uri.parse("https://wa.me/${target.digits}"),
+                ).setPackage(target.packageName)
+            }
             try {
                 context.startActivity(intent)
             } catch (_: ActivityNotFoundException) {
@@ -275,7 +290,14 @@ fun QuickDialApp(viewModel: QuickDialViewModel = viewModel()) {
                 NumberDialog(prompt, onDismiss = viewModel::dismissNumber, onConfirm = viewModel::confirmNumber)
             }
             picker.renamePrompt?.let { prompt ->
-                RenameDialog(prompt, onDismiss = viewModel::dismissRename, onSave = viewModel::saveRename)
+                RenameDialog(
+                    prompt = prompt,
+                    onDismiss = viewModel::dismissRename,
+                    onSave = viewModel::saveRename,
+                    onGallery = { photoActions.onGallery(prompt.rowId) },
+                    onCamera = { photoActions.onCamera(prompt.rowId) },
+                    onRestorePhoto = { viewModel.clearCustomPhoto(prompt.rowId) },
+                )
             }
         }
     }
@@ -481,6 +503,7 @@ private fun startVoice(context: Context, viewModel: QuickDialViewModel, hold: (H
                 },
             )
         },
+        onIdle = { viewModel.setListening(false) },
     )
     hold(speech)
     speech.start()

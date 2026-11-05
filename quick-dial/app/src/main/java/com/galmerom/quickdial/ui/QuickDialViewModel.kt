@@ -15,7 +15,8 @@ import com.galmerom.quickdial.data.CallLogReader
 import com.galmerom.quickdial.data.DeviceContact
 import com.galmerom.quickdial.data.PhoneBook
 import com.galmerom.quickdial.data.SettingsStore
-import com.galmerom.quickdial.data.WhatsAppLink
+import com.galmerom.quickdial.data.TilePhotos
+import com.galmerom.quickdial.data.WhatsAppTarget
 import com.galmerom.quickdial.data.phoneLabel
 import com.galmerom.quickdial.domain.ContactNumbers
 import com.galmerom.quickdial.domain.DialTheme
@@ -67,6 +68,8 @@ enum class NoticeKind {
     MicDenied,
     CallDenied,
     ContactsDenied,
+    CameraDenied,
+    PhotoFailed,
 }
 
 data class NoticeEvent(val kind: NoticeKind, val detail: String? = null)
@@ -123,7 +126,12 @@ data class NumberPrompt(
     val selectedIndex: Int,
 )
 
-data class RenamePrompt(val rowId: String, val displayName: String, val initial: String)
+data class RenamePrompt(
+    val rowId: String,
+    val displayName: String,
+    val initial: String,
+    val hasCustomPhoto: Boolean,
+)
 
 data class PickerUi(
     val query: String = "",
@@ -137,6 +145,7 @@ class QuickDialViewModel(app: Application) : AndroidViewModel(app) {
     private val store = SettingsStore(app)
     private val phoneBook = PhoneBook(app)
     private val callLog = CallLogReader(app)
+    private val tilePhotos = TilePhotos(app)
 
     private var latestSettings = QuickDialSettings()
     private var latestDevices: List<DeviceContact> = emptyList()
@@ -153,6 +162,7 @@ class QuickDialViewModel(app: Application) : AndroidViewModel(app) {
     private var numberPrompt: NumberPrompt? = null
     private var renamePrompt: RenamePrompt? = null
     private val pendingShort = mutableMapOf<String, String>()
+    private val pendingPhoto = mutableMapOf<String, String>()
     private var refreshJob: Job? = null
     private var watching = false
 
@@ -167,11 +177,11 @@ class QuickDialViewModel(app: Application) : AndroidViewModel(app) {
     )
     val notices: SharedFlow<NoticeEvent> = _notices.asSharedFlow()
 
-    private val _whatsApp = MutableSharedFlow<WhatsAppLink>(
+    private val _whatsApp = MutableSharedFlow<WhatsAppTarget>(
         extraBufferCapacity = 1,
         onBufferOverflow = BufferOverflow.DROP_OLDEST,
     )
-    val whatsApp: SharedFlow<WhatsAppLink> = _whatsApp.asSharedFlow()
+    val whatsApp: SharedFlow<WhatsAppTarget> = _whatsApp.asSharedFlow()
 
     private val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
         override fun onChange(selfChange: Boolean) {
@@ -236,8 +246,8 @@ class QuickDialViewModel(app: Application) : AndroidViewModel(app) {
             latestCounts = counts
             contactsGranted = contactsOk
             callLogGranted = callLogOk
-            photos = paired.mapNotNull { (contact, device) ->
-                device?.photoUri?.let { contact.id to it }
+            photos = latestSettings.contacts.mapNotNull { contact ->
+                resolvePhoto(contact, findDevice(devices, contact))?.let { contact.id to it }
             }.toMap()
             ready = true
             watchCallLog()
@@ -355,7 +365,13 @@ class QuickDialViewModel(app: Application) : AndroidViewModel(app) {
         val device = latestDevices.find { it.id == rowId } ?: return
         val saved = latestSettings.contacts.find { it.id == rowId }
         val initial = saved?.shortName ?: pendingShort[rowId] ?: defaultShortName(device.displayName)
-        renamePrompt = RenamePrompt(rowId, device.displayName, initial)
+        val custom = saved?.customPhotoFile ?: pendingPhoto[rowId]
+        renamePrompt = RenamePrompt(
+            rowId = rowId,
+            displayName = device.displayName,
+            initial = initial,
+            hasCustomPhoto = !custom.isNullOrBlank(),
+        )
         publish()
     }
 
@@ -384,6 +400,59 @@ class QuickDialViewModel(app: Application) : AndroidViewModel(app) {
     fun dismissRename() {
         renamePrompt = null
         publish()
+    }
+
+    fun setCustomPhoto(rowId: String, fileName: String) {
+        val saved = latestSettings.contacts.any { it.id == rowId }
+        if (!saved) {
+            pendingPhoto[rowId]?.let { previous ->
+                if (previous != fileName) tilePhotos.delete(previous)
+            }
+            pendingPhoto[rowId] = fileName
+            renamePrompt = renamePrompt?.takeIf { it.rowId == rowId }?.copy(hasCustomPhoto = true) ?: renamePrompt
+            publish()
+            return
+        }
+        viewModelScope.launch {
+            store.update { current ->
+                current.copy(
+                    contacts = current.contacts.map { contact ->
+                        if (contact.id != rowId) {
+                            contact
+                        } else {
+                            if (contact.customPhotoFile != null && contact.customPhotoFile != fileName) {
+                                tilePhotos.delete(contact.customPhotoFile)
+                            }
+                            contact.copy(customPhotoFile = fileName)
+                        }
+                    },
+                )
+            }
+            renamePrompt = renamePrompt?.takeIf { it.rowId == rowId }?.copy(hasCustomPhoto = true) ?: renamePrompt
+            refresh()
+        }
+    }
+
+    fun clearCustomPhoto(rowId: String) {
+        val saved = latestSettings.contacts.find { it.id == rowId }
+        if (saved == null) {
+            tilePhotos.delete(pendingPhoto.remove(rowId))
+            renamePrompt = renamePrompt?.takeIf { it.rowId == rowId }?.copy(hasCustomPhoto = false) ?: renamePrompt
+            publish()
+            return
+        }
+        viewModelScope.launch {
+            tilePhotos.delete(saved.customPhotoFile)
+            store.update { current ->
+                current.copy(
+                    contacts = current.contacts.map { contact ->
+                        if (contact.id == rowId) contact.copy(customPhotoFile = null) else contact
+                    },
+                )
+            }
+            renamePrompt = renamePrompt?.takeIf { it.rowId == rowId }?.copy(hasCustomPhoto = false) ?: renamePrompt
+            refresh()
+        }
     }
 
     fun setListening(value: Boolean) {
@@ -495,6 +564,7 @@ class QuickDialViewModel(app: Application) : AndroidViewModel(app) {
                     shortName = shortName,
                     phoneNumber = number,
                     addedAt = System.currentTimeMillis(),
+                    customPhotoFile = pendingPhoto[device.id],
                 )
                 val order = if (current.frozen) {
                     (current.frozenOrder + contact.id).distinct()
@@ -601,6 +671,12 @@ class QuickDialViewModel(app: Application) : AndroidViewModel(app) {
                 suggested = index == suggested,
             )
         }
+    }
+
+    private fun resolvePhoto(contact: SavedContact, device: DeviceContact?): String? {
+        val custom = contact.customPhotoFile?.let { tilePhotos.fileUri(it) }
+        if (custom != null) return custom
+        return device?.photoUri
     }
 
     private fun findDevice(devices: List<DeviceContact>, saved: SavedContact): DeviceContact? =

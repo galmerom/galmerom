@@ -35,7 +35,15 @@
     <string name="search_contacts">חיפוש איש קשר</string>
     <string name="no_results">אין תוצאות</string>
     <string name="no_phone_contacts">אין אנשי קשר עם מספר טלפון.</string>
-    <string name="edit_short_name">עריכת שם קצר</string>
+    <string name="edit_short_name">עריכת איש קשר</string>
+    <string name="photo_section">תמונה</string>
+    <string name="photo_gallery">גלריה</string>
+    <string name="photo_camera">מצלמה</string>
+    <string name="photo_restore">חזרה לתמונה המקורית</string>
+    <string name="camera_denied_title">אין גישה למצלמה</string>
+    <string name="camera_denied_body">כדי לצלם תמונה לאיש הקשר צריך לאשר את המצלמה.</string>
+    <string name="photo_failed_title">התמונה לא נשמרה</string>
+    <string name="photo_failed_body">לא הצלחתי לשמור את התמונה. נסה שוב.</string>
     <string name="short_name">שם קצר</string>
     <string name="save">שמירה</string>
     <string name="cancel">ביטול</string>

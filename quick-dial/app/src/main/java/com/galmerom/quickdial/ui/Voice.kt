@@ -5,50 +5,68 @@ import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
+import com.galmerom.quickdial.domain.SpeechWindow
 
 enum class SpeechProblem { Failed, Unavailable, Permission }
 
 /**
- * Hebrew speech via the platform SpeechRecognizer. On-device recognition is
- * preferred, and a single online retry covers devices without an offline model.
+ * Hebrew speech via the platform SpeechRecognizer.
+ * Listening ends after two seconds of silence once speech has started, and
+ * always within five seconds of the start. Every finish path returns to idle.
  */
 class HebrewSpeechSession(
     context: Context,
     private val onResult: (List<String>) -> Unit,
     private val onError: (SpeechProblem) -> Unit,
+    private val onIdle: () -> Unit,
 ) {
     private val appContext = context.applicationContext
     private val main = Handler(Looper.getMainLooper())
     private var recognizer: SpeechRecognizer? = null
     private var generation = 0
-    private var stopped = false
+    private var closed = false
+    private var delivered = false
     private var retried = false
+    private var startedAt = 0L
+    private val cap = Runnable { onCap() }
+    private val giveUp = Runnable { finishWithError(SpeechProblem.Failed) }
 
     fun start() {
-        stopped = false
+        closed = false
+        delivered = false
         retried = false
+        startedAt = SystemClock.elapsedRealtime()
         if (!SpeechRecognizer.isRecognitionAvailable(appContext)) {
+            onIdle()
             onError(SpeechProblem.Unavailable)
             return
         }
         listen(preferOffline = true)
+        main.removeCallbacks(cap)
+        main.postDelayed(cap, SpeechWindow.MAX_LISTEN_MS)
     }
 
+    /** User cancelled. Late recognizer callbacks must not show an error or place a call. */
     fun stop() {
-        stopped = true
+        closed = true
+        delivered = true
+        main.removeCallbacks(cap)
+        main.removeCallbacks(giveUp)
         generation += 1
         runCatching { recognizer?.cancel() }
         runCatching { recognizer?.destroy() }
         recognizer = null
+        onIdle()
     }
 
     private fun listen(preferOffline: Boolean) {
         val created = runCatching { SpeechRecognizer.createSpeechRecognizer(appContext) }.getOrNull()
         if (created == null) {
-            onError(SpeechProblem.Unavailable)
+            finishWithError(SpeechProblem.Unavailable)
             return
         }
         val token = ++generation
@@ -62,26 +80,43 @@ class HebrewSpeechSession(
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5)
             putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, preferOffline)
             putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, appContext.packageName)
+            putExtra(
+                RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS,
+                SpeechWindow.SILENCE_AFTER_SPEECH_MS,
+            )
+            putExtra(
+                RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS,
+                SpeechWindow.SILENCE_AFTER_SPEECH_MS,
+            )
         }
         runCatching { created.startListening(intent) }.onFailure {
-            if (!stopped && token == generation) onError(SpeechProblem.Failed)
+            finishWithError(SpeechProblem.Failed)
         }
+    }
+
+    private fun onCap() {
+        if (closed || delivered) return
+        onIdle()
+        runCatching { recognizer?.stopListening() }
+        main.removeCallbacks(giveUp)
+        main.postDelayed(giveUp, 1_200)
     }
 
     private fun listener(token: Int, preferOffline: Boolean) = object : RecognitionListener {
         override fun onResults(results: Bundle?) {
             val phrases = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION).orEmpty()
             onMain {
-                if (stopped || token != generation) return@onMain
-                stop()
-                if (phrases.isEmpty()) onError(SpeechProblem.Failed) else onResult(phrases)
+                if (closed || delivered || token != generation) return@onMain
+                if (phrases.isEmpty()) finishWithError(SpeechProblem.Failed)
+                else finishWithResult(phrases)
             }
         }
 
         override fun onError(error: Int) {
             onMain {
-                if (stopped || token != generation) return@onMain
-                val canRetry = preferOffline && !retried && error in RETRYABLE
+                if (closed || delivered || token != generation) return@onMain
+                val elapsed = SystemClock.elapsedRealtime() - startedAt
+                val canRetry = preferOffline && !retried && error in RETRYABLE && elapsed < SpeechWindow.MAX_LISTEN_MS
                 if (canRetry) {
                     retried = true
                     runCatching { recognizer?.destroy() }
@@ -89,8 +124,7 @@ class HebrewSpeechSession(
                     listen(preferOffline = false)
                     return@onMain
                 }
-                stop()
-                onError(
+                finishWithError(
                     when (error) {
                         SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> SpeechProblem.Permission
                         SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED,
@@ -102,13 +136,44 @@ class HebrewSpeechSession(
             }
         }
 
+        override fun onEndOfSpeech() {
+            onMain {
+                if (closed || token != generation) return@onMain
+                onIdle()
+                runCatching { recognizer?.stopListening() }
+            }
+        }
+
         override fun onReadyForSpeech(params: Bundle?) = Unit
         override fun onBeginningOfSpeech() = Unit
         override fun onRmsChanged(rmsdB: Float) = Unit
         override fun onBufferReceived(buffer: ByteArray?) = Unit
-        override fun onEndOfSpeech() = Unit
         override fun onPartialResults(partialResults: Bundle?) = Unit
         override fun onEvent(eventType: Int, params: Bundle?) = Unit
+    }
+
+    private fun finishWithResult(phrases: List<String>) {
+        if (closed || delivered) return
+        delivered = true
+        releaseRecognizer()
+        onIdle()
+        onResult(phrases)
+    }
+
+    private fun finishWithError(problem: SpeechProblem) {
+        if (closed || delivered) return
+        delivered = true
+        releaseRecognizer()
+        onIdle()
+        onError(problem)
+    }
+
+    private fun releaseRecognizer() {
+        main.removeCallbacks(cap)
+        main.removeCallbacks(giveUp)
+        generation += 1
+        runCatching { recognizer?.destroy() }
+        recognizer = null
     }
 
     private fun onMain(block: () -> Unit) {
