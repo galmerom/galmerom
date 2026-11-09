@@ -38,6 +38,13 @@
     <string name="photo_gallery">גלריה</string>
     <string name="photo_camera">מצלמה</string>
     <string name="photo_restore">חזרה לתמונה המקורית</string>
+    <string name="edit_mode">מצב עריכה</string>
+    <string name="edit_mode_banner">מצב עריכה פעיל</string>
+    <string name="edit_mode_exit">יציאה</string>
+    <string name="remove_from_list">הסר מהרשימה</string>
+    <string name="remove_confirm_title">להסיר מהרשימה?</string>
+    <string name="remove_confirm_body">%1$s יוסר מחיוג המהיר.</string>
+    <string name="remove_confirm_yes">הסרה</string>
     <string name="camera_denied_title">אין גישה למצלמה</string>
     <string name="camera_denied_body">כדי לצלם תמונה לאיש הקשר צריך לאשר את המצלמה.</string>
     <string name="photo_failed_title">התמונה לא נשמרה</string>

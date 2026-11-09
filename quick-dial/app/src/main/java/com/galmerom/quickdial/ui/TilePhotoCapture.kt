@@ -13,18 +13,12 @@ import androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
-import com.galmerom.quickdial.data.TilePhotos
 import java.io.File
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 data class TilePhotoActions(
     val onGallery: (contactId: String) -> Unit,
@@ -33,13 +27,11 @@ data class TilePhotoActions(
 
 @Composable
 fun rememberTilePhotoActions(
-    onSaved: (contactId: String, fileName: String) -> Unit,
-    onFailure: () -> Unit,
+    onPicked: (contactId: String, uri: Uri) -> Unit,
     onDenied: () -> Unit,
+    onCaptureActive: (Boolean) -> Unit = {},
 ): TilePhotoActions {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val photos = remember { TilePhotos(context.applicationContext) }
     // The camera app recreates this screen. The file is created first and the
     // URI is remembered so the picture can still be copied when we come back.
     var cameraUriString by rememberSaveable { mutableStateOf<String?>(null) }
@@ -48,17 +40,14 @@ fun rememberTilePhotoActions(
     val takePicture = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
         val contactId = cameraContactId
         val uri = cameraUriString?.let(Uri::parse)
+        onCaptureActive(false)
         if (!success || contactId.isNullOrBlank() || uri == null) return@rememberLauncherForActivityResult
-        scope.launch {
-            val name = withContext(Dispatchers.IO) {
-                runCatching { photos.importCenterSquare(context, contactId, uri) }.getOrNull()
-            }
-            if (name == null) onFailure() else onSaved(contactId, name)
-        }
+        onPicked(contactId, uri)
     }
     val requestCamera = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         val contactId = cameraContactId
         if (!granted || contactId.isNullOrBlank()) {
+            onCaptureActive(false)
             if (!granted) onDenied()
             return@rememberLauncherForActivityResult
         }
@@ -68,22 +57,20 @@ fun rememberTilePhotoActions(
     }
     val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         val contactId = cameraContactId
+        onCaptureActive(false)
         if (uri == null || contactId.isNullOrBlank()) return@rememberLauncherForActivityResult
-        scope.launch {
-            val name = withContext(Dispatchers.IO) {
-                runCatching { photos.importCenterSquare(context, contactId, uri) }.getOrNull()
-            }
-            if (name == null) onFailure() else onSaved(contactId, name)
-        }
+        onPicked(contactId, uri)
     }
 
     return TilePhotoActions(
         onGallery = { contactId ->
             cameraContactId = contactId
+            onCaptureActive(true)
             pickImage.launch(PickVisualMediaRequest(PickVisualMedia.ImageOnly))
         },
         onCamera = { contactId ->
             cameraContactId = contactId
+            onCaptureActive(true)
             val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
                 PackageManager.PERMISSION_GRANTED
             if (granted) {

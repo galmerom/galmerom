@@ -94,11 +94,13 @@ fun QuickDialApp(viewModel: QuickDialViewModel = viewModel()) {
     var askedCallLog by remember { mutableStateOf(false) }
     var askedContacts by remember { mutableStateOf(false) }
     var openPickerOnGrant by remember { mutableStateOf(false) }
+    val capturingPhoto = remember { mutableStateOf(false) }
 
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) viewModel.refresh()
+            if (event == Lifecycle.Event.ON_STOP && !capturingPhoto.value) viewModel.leaveEditMode()
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
@@ -109,9 +111,9 @@ fun QuickDialApp(viewModel: QuickDialViewModel = viewModel()) {
         viewModel.notices.collect { notice = it }
     }
     val photoActions = rememberTilePhotoActions(
-        onSaved = viewModel::setCustomPhoto,
-        onFailure = { viewModel.notify(NoticeKind.PhotoFailed) },
+        onPicked = viewModel::stagePhoto,
         onDenied = { viewModel.notify(NoticeKind.CameraDenied) },
+        onCaptureActive = { capturingPhoto.value = it },
     )
     LaunchedEffect(Unit) {
         viewModel.whatsApp.collect { target ->
@@ -202,6 +204,7 @@ fun QuickDialApp(viewModel: QuickDialViewModel = viewModel()) {
                             onBadge = viewModel::setBadge,
                             onSize = viewModel::setShortNameSize,
                             onTheme = viewModel::setTheme,
+                            onEditMode = viewModel::setEditMode,
                         )
                     },
                 ) {
@@ -216,6 +219,8 @@ fun QuickDialApp(viewModel: QuickDialViewModel = viewModel()) {
                             onOpenMenu = { scope.launch { drawerState.open() } },
                             onCall = viewModel::requestCall,
                             onWhatsApp = viewModel::onWhatsApp,
+                            onEdit = viewModel::beginEdit,
+                            onExitEdit = { viewModel.setEditMode(false) },
                             modifier = Modifier.padding(padding),
                         )
                     }
@@ -276,7 +281,8 @@ fun QuickDialApp(viewModel: QuickDialViewModel = viewModel()) {
                     onSave = viewModel::saveRename,
                     onGallery = { photoActions.onGallery(prompt.rowId) },
                     onCamera = { photoActions.onCamera(prompt.rowId) },
-                    onRestorePhoto = { viewModel.clearCustomPhoto(prompt.rowId) },
+                    onRestorePhoto = viewModel::restoreOriginalPhoto,
+                    onRemove = { viewModel.removeFromGrid(prompt.rowId) },
                 )
             }
         }
@@ -330,6 +336,7 @@ private fun DrawerContent(
     onBadge: (Boolean) -> Unit,
     onSize: (ShortNameSize) -> Unit,
     onTheme: (DialTheme) -> Unit,
+    onEditMode: (Boolean) -> Unit,
 ) {
     ModalDrawerSheet(modifier = Modifier.fillMaxHeight()) {
         Column(
@@ -337,6 +344,7 @@ private fun DrawerContent(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(stringResource(R.string.app_name), style = MaterialTheme.typography.headlineSmall)
+            SettingSwitch(stringResource(R.string.edit_mode), ui.editMode, onEditMode)
             Text(stringResource(R.string.columns), style = MaterialTheme.typography.titleMedium)
             Row(
                 modifier = Modifier.horizontalScroll(rememberScrollState()),

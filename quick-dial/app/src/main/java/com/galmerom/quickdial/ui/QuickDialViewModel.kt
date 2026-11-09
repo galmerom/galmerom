@@ -18,6 +18,7 @@ import com.galmerom.quickdial.data.SettingsStore
 import com.galmerom.quickdial.data.TilePhotos
 import com.galmerom.quickdial.data.WhatsAppTarget
 import com.galmerom.quickdial.data.phoneLabel
+import com.galmerom.quickdial.domain.ContactIdentity
 import com.galmerom.quickdial.domain.ContactNumbers
 import com.galmerom.quickdial.domain.DialTheme
 import com.galmerom.quickdial.domain.NumberOption
@@ -31,8 +32,10 @@ import com.galmerom.quickdial.domain.cleanShortName
 import com.galmerom.quickdial.domain.defaultShortName
 import com.galmerom.quickdial.domain.distinctNumbers
 import com.galmerom.quickdial.domain.matchesContactQuery
+import com.galmerom.quickdial.domain.mergeDuplicateTiles
 import com.galmerom.quickdial.domain.nameOrder
 import com.galmerom.quickdial.domain.orderedIds
+import com.galmerom.quickdial.domain.savedTileFor
 import com.galmerom.quickdial.domain.outgoingCallCounts
 import com.galmerom.quickdial.domain.samePhone
 import com.galmerom.quickdial.domain.sixMonthsBefore
@@ -97,6 +100,7 @@ data class HomeUi(
     val contactsDenied: Boolean = false,
     val callLogDenied: Boolean = false,
     val ready: Boolean = false,
+    val editMode: Boolean = false,
 )
 
 data class LabeledNumber(val number: String, val label: String, val suggested: Boolean)
@@ -122,6 +126,12 @@ data class RenamePrompt(
     val displayName: String,
     val initial: String,
     val hasCustomPhoto: Boolean,
+    val originalPhotoUri: String? = null,
+    val customPhotoUri: String? = null,
+    val stagedPhotoUri: String? = null,
+    val stagedFile: String? = null,
+    val restoreOriginal: Boolean = false,
+    val onGrid: Boolean = false,
 )
 
 data class PickerUi(
@@ -145,6 +155,7 @@ class QuickDialViewModel(app: Application) : AndroidViewModel(app) {
     private var contactsGranted = false
     private var callLogGranted = false
     private var ready = false
+    private var editMode = false
     private var screen = Screen.Home
     private var callPhase: CallPhase = CallPhase.Idle
     private var query = ""
@@ -199,20 +210,13 @@ class QuickDialViewModel(app: Application) : AndroidViewModel(app) {
                 if (!contactsOk) emptyList()
                 else runCatching { phoneBook.loadAll() }.getOrDefault(emptyList())
             }
-            val paired = settings.contacts.map { it to findDevice(devices, it) }
-            val renamed = paired.map { (contact, device) ->
-                if (device == null) {
-                    contact
-                } else {
-                    contact.copy(
-                        contactId = device.contactId,
-                        lookupKey = device.lookupKey.ifBlank { contact.lookupKey },
-                        displayName = device.displayName.ifBlank { contact.displayName },
-                    )
+            val resolved = resolveSaved(settings.contacts, devices, contactsOk)
+            val merge = mergeDuplicateTiles(settings.contacts, resolved, settings.frozenOrder)
+            if (merge.contacts != settings.contacts || merge.frozenOrder != settings.frozenOrder) {
+                merge.droppedPhotoFiles.forEach { tilePhotos.delete(it) }
+                store.update { current ->
+                    current.copy(contacts = merge.contacts, frozenOrder = merge.frozenOrder)
                 }
-            }
-            if (renamed != settings.contacts) {
-                store.update { current -> current.copy(contacts = renamed) }
                 latestSettings = store.settings.first()
             }
             val now = System.currentTimeMillis()
@@ -276,6 +280,20 @@ class QuickDialViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setTheme(theme: DialTheme) = updateSettings { it.copy(theme = theme.key) }
 
+    fun setEditMode(enabled: Boolean) {
+        editMode = enabled
+        if (!enabled && screen == Screen.Home) {
+            discardStagedPhoto()
+            renamePrompt = null
+        }
+        publish()
+    }
+
+    fun leaveEditMode() {
+        if (!editMode) return
+        setEditMode(false)
+    }
+
     fun setFrozen(frozen: Boolean) {
         viewModelScope.launch {
             store.update { current ->
@@ -305,20 +323,17 @@ class QuickDialViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun toggle(rowId: String) {
-        if (latestSettings.contacts.any { it.id == rowId }) {
-            viewModelScope.launch {
-                store.update { current ->
-                    current.copy(
-                        contacts = current.contacts.filterNot { it.id == rowId },
-                        frozenOrder = current.frozenOrder.filterNot { it == rowId },
-                    )
-                }
-                pendingShort.remove(rowId)
-                refresh()
-            }
+        val device = latestDevices.find { it.id == rowId } ?: return
+        val existing = savedTileFor(
+            device.lookupKey,
+            device.contactId,
+            device.phones.map { it.number },
+            latestSettings.contacts,
+        )
+        if (existing != null) {
+            removeFromGrid(existing.id)
             return
         }
-        val device = latestDevices.find { it.id == rowId } ?: return
         val phones = labeledPhones(device)
         if (phones.isEmpty()) {
             notify(NoticeKind.NoNumber)
@@ -350,96 +365,107 @@ class QuickDialViewModel(app: Application) : AndroidViewModel(app) {
         publish()
     }
 
-    fun beginRename(rowId: String) {
-        val device = latestDevices.find { it.id == rowId } ?: return
-        val saved = latestSettings.contacts.find { it.id == rowId }
-        val initial = saved?.shortName ?: pendingShort[rowId] ?: defaultShortName(device.displayName)
-        val custom = saved?.customPhotoFile ?: pendingPhoto[rowId]
-        renamePrompt = RenamePrompt(
-            rowId = rowId,
-            displayName = device.displayName,
-            initial = initial,
-            hasCustomPhoto = !custom.isNullOrBlank(),
-        )
-        publish()
-    }
+    fun beginRename(rowId: String) = openEditor(rowId)
+
+    fun beginEdit(tile: Tile) = openEditor(tile.id)
 
     fun saveRename(value: String) {
         val prompt = renamePrompt ?: return
         val cleaned = cleanShortName(value, prompt.displayName)
-        val saved = latestSettings.contacts.any { it.id == prompt.rowId }
+        val saved = latestSettings.contacts.find { it.id == prompt.rowId }
+        val staged = prompt.stagedFile
+        val restore = prompt.restoreOriginal
         renamePrompt = null
         publish()
-        if (!saved) {
+        if (saved == null) {
             pendingShort[prompt.rowId] = cleaned
+            if (restore) {
+                tilePhotos.delete(pendingPhoto.remove(prompt.rowId))
+                tilePhotos.delete(staged)
+            } else if (staged != null) {
+                tilePhotos.promoteStaged(staged, prompt.rowId)?.let { pendingPhoto[prompt.rowId] = it }
+            }
             publish()
             return
         }
         viewModelScope.launch {
+            val photoName = when {
+                staged != null -> tilePhotos.promoteStaged(staged, prompt.rowId) ?: saved.customPhotoFile
+                restore -> {
+                    tilePhotos.delete(saved.customPhotoFile)
+                    null
+                }
+                else -> saved.customPhotoFile
+            }
+            if (staged != null && photoName != null && photoName != saved.customPhotoFile) {
+                tilePhotos.delete(saved.customPhotoFile)
+            }
             store.update { current ->
                 current.copy(
                     contacts = current.contacts.map { contact ->
-                        if (contact.id == prompt.rowId) contact.copy(shortName = cleaned) else contact
-                    },
-                )
-            }
-        }
-    }
-
-    fun dismissRename() {
-        renamePrompt = null
-        publish()
-    }
-
-    fun setCustomPhoto(rowId: String, fileName: String) {
-        val saved = latestSettings.contacts.any { it.id == rowId }
-        if (!saved) {
-            pendingPhoto[rowId]?.let { previous ->
-                if (previous != fileName) tilePhotos.delete(previous)
-            }
-            pendingPhoto[rowId] = fileName
-            renamePrompt = renamePrompt?.takeIf { it.rowId == rowId }?.copy(hasCustomPhoto = true) ?: renamePrompt
-            publish()
-            return
-        }
-        viewModelScope.launch {
-            store.update { current ->
-                current.copy(
-                    contacts = current.contacts.map { contact ->
-                        if (contact.id != rowId) {
-                            contact
+                        if (contact.id == prompt.rowId) {
+                            contact.copy(shortName = cleaned, customPhotoFile = photoName)
                         } else {
-                            if (contact.customPhotoFile != null && contact.customPhotoFile != fileName) {
-                                tilePhotos.delete(contact.customPhotoFile)
-                            }
-                            contact.copy(customPhotoFile = fileName)
+                            contact
                         }
                     },
                 )
             }
-            renamePrompt = renamePrompt?.takeIf { it.rowId == rowId }?.copy(hasCustomPhoto = true) ?: renamePrompt
             refresh()
         }
     }
 
-    fun clearCustomPhoto(rowId: String) {
-        val saved = latestSettings.contacts.find { it.id == rowId }
-        if (saved == null) {
-            tilePhotos.delete(pendingPhoto.remove(rowId))
-            renamePrompt = renamePrompt?.takeIf { it.rowId == rowId }?.copy(hasCustomPhoto = false) ?: renamePrompt
-            publish()
-            return
-        }
+    fun dismissRename() {
+        discardStagedPhoto()
+        renamePrompt = null
+        publish()
+    }
+
+    fun stagePhoto(rowId: String, source: android.net.Uri) {
         viewModelScope.launch {
-            tilePhotos.delete(saved.customPhotoFile)
-            store.update { current ->
-                current.copy(
-                    contacts = current.contacts.map { contact ->
-                        if (contact.id == rowId) contact.copy(customPhotoFile = null) else contact
-                    },
+            val name = withContext(Dispatchers.IO) {
+                runCatching { tilePhotos.importCenterSquare(getApplication(), rowId, source, staged = true) }.getOrNull()
+            }
+            if (name == null) {
+                notify(NoticeKind.PhotoFailed)
+                return@launch
+            }
+            val previous = renamePrompt?.stagedFile
+            if (previous != null && previous != name) tilePhotos.delete(previous)
+            renamePrompt = renamePrompt?.takeIf { it.rowId == rowId }?.copy(
+                stagedFile = name,
+                stagedPhotoUri = tilePhotos.fileUri(name),
+                restoreOriginal = false,
+            )
+            publish()
+        }
+    }
+
+    fun restoreOriginalPhoto() {
+        val prompt = renamePrompt ?: return
+        prompt.stagedFile?.let { tilePhotos.delete(it) }
+        renamePrompt = prompt.copy(
+            stagedFile = null,
+            stagedPhotoUri = null,
+            restoreOriginal = prompt.hasCustomPhoto || prompt.customPhotoUri != null,
+        )
+        publish()
+    }
+
+    fun removeFromGrid(rowId: String) {
+        discardStagedPhoto()
+        renamePrompt = null
+        viewModelScope.launch {
+            val current = latestSettings.contacts.find { it.id == rowId }
+            tilePhotos.delete(current?.customPhotoFile)
+            store.update { settings ->
+                settings.copy(
+                    contacts = settings.contacts.filterNot { it.id == rowId },
+                    frozenOrder = settings.frozenOrder.filterNot { it == rowId },
                 )
             }
-            renamePrompt = renamePrompt?.takeIf { it.rowId == rowId }?.copy(hasCustomPhoto = false) ?: renamePrompt
+            pendingShort.remove(rowId)
+            pendingPhoto.remove(rowId)
             refresh()
         }
     }
@@ -565,16 +591,16 @@ class QuickDialViewModel(app: Application) : AndroidViewModel(app) {
             contactsDenied = ready && hasSaved && !contactsGranted,
             callLogDenied = ready && hasSaved && !callLogGranted,
             ready = ready,
+            editMode = editMode,
         )
         _picker.value = buildPicker()
     }
 
     private fun buildPicker(): PickerUi {
-        val selected = latestSettings.contacts.associateBy { it.id }
         val rows = latestDevices.mapNotNull { device ->
             val numbers = device.phones.map { it.number }
             if (!matchesContactQuery(device.displayName, numbers, query)) return@mapNotNull null
-            val saved = selected[device.id]
+            val saved = savedTileFor(device.lookupKey, device.contactId, numbers, latestSettings.contacts)
             val phones = labeledPhones(device)
             PickerRow(
                 id = device.id,
@@ -620,6 +646,60 @@ class QuickDialViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    private suspend fun resolveSaved(
+        saved: List<SavedContact>,
+        devices: List<DeviceContact>,
+        contactsOk: Boolean,
+    ): Map<String, ContactIdentity> {
+        if (!contactsOk || saved.isEmpty()) return emptyMap()
+        return withContext(Dispatchers.IO) {
+            saved.mapNotNull { contact ->
+                val direct = runCatching {
+                    phoneBook.currentIdentity(contact.contactId, contact.lookupKey)
+                }.getOrNull()
+                val matched = direct ?: devices.firstOrNull { device ->
+                    savedTileFor(
+                        device.lookupKey,
+                        device.contactId,
+                        device.phones.map { it.number },
+                        listOf(contact),
+                    ) != null
+                }?.let { device ->
+                    ContactIdentity(device.id, device.contactId, device.lookupKey, device.displayName)
+                }
+                matched?.let { contact.id to it }
+            }.toMap()
+        }
+    }
+
+    private fun openEditor(rowId: String) {
+        val saved = latestSettings.contacts.find { it.id == rowId }
+            ?: latestDevices.find { it.id == rowId }?.let { device ->
+                savedTileFor(device.lookupKey, device.contactId, device.phones.map { it.number }, latestSettings.contacts)
+            }
+        val device = latestDevices.find { it.id == (saved?.id ?: rowId) }
+            ?: saved?.let { findDevice(latestDevices, it) }
+            ?: latestDevices.find { it.id == rowId }
+        if (saved == null && device == null) return
+        val displayName = device?.displayName?.ifBlank { null } ?: saved?.displayName.orEmpty()
+        val customFile = saved?.customPhotoFile ?: pendingPhoto[rowId]
+        discardStagedPhoto()
+        renamePrompt = RenamePrompt(
+            rowId = saved?.id ?: rowId,
+            displayName = displayName,
+            initial = saved?.shortName ?: pendingShort[rowId] ?: defaultShortName(displayName),
+            hasCustomPhoto = !customFile.isNullOrBlank(),
+            originalPhotoUri = device?.photoUri,
+            customPhotoUri = customFile?.let { tilePhotos.fileUri(it) },
+            onGrid = saved != null,
+        )
+        publish()
+    }
+
+    private fun discardStagedPhoto() {
+        renamePrompt?.stagedFile?.let { tilePhotos.delete(it) }
+    }
+
     private fun resolvePhoto(contact: SavedContact, device: DeviceContact?): String? {
         val custom = contact.customPhotoFile?.let { tilePhotos.fileUri(it) }
         if (custom != null) return custom
@@ -627,9 +707,14 @@ class QuickDialViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun findDevice(devices: List<DeviceContact>, saved: SavedContact): DeviceContact? =
-        devices.find { it.id == saved.id }
-            ?: devices.find { saved.lookupKey.isNotBlank() && it.lookupKey == saved.lookupKey }
-            ?: devices.find { it.contactId == saved.contactId }
+        devices.find { device ->
+            savedTileFor(
+                device.lookupKey,
+                device.contactId,
+                device.phones.map { it.number },
+                listOf(saved),
+            ) != null
+        }
 
     private fun hasPermission(permission: String): Boolean =
         ContextCompat.checkSelfPermission(getApplication(), permission) == PackageManager.PERMISSION_GRANTED

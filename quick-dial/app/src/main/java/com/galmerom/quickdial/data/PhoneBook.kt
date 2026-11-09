@@ -5,6 +5,8 @@ import android.content.Context
 import android.provider.ContactsContract
 import android.provider.ContactsContract.CommonDataKinds.Phone
 import android.provider.ContactsContract.Data
+import com.galmerom.quickdial.domain.ContactIdentity
+import com.galmerom.quickdial.domain.stableContactId
 import com.galmerom.quickdial.domain.whatsAppDigits
 
 data class DevicePhone(
@@ -135,6 +137,38 @@ class PhoneBook(private val context: Context) {
         business?.let { return it }
         val digits = whatsAppDigits(fallbackNumber) ?: return null
         return WhatsAppTarget.Phone(digits, "com.whatsapp")
+    }
+
+    /** Follow an old id or lookup key to the contact as it exists now. */
+    fun currentIdentity(contactId: Long, lookupKey: String): ContactIdentity? {
+        val lookupUri = when {
+            lookupKey.isNotBlank() -> ContactsContract.Contacts.getLookupUri(contactId, lookupKey)
+            contactId > 0L -> ContentUris.withAppendedId(ContactsContract.Contacts.CONTENT_URI, contactId)
+            else -> null
+        } ?: return null
+        val resolved = if (lookupKey.isNotBlank()) {
+            ContactsContract.Contacts.lookupContact(context.contentResolver, lookupUri) ?: return null
+        } else {
+            lookupUri
+        }
+        context.contentResolver.query(
+            resolved,
+            arrayOf(
+                ContactsContract.Contacts._ID,
+                ContactsContract.Contacts.LOOKUP_KEY,
+                ContactsContract.Contacts.DISPLAY_NAME,
+            ),
+            null,
+            null,
+            null,
+        )?.use { cursor ->
+            if (!cursor.moveToFirst()) return null
+            val id = cursor.getLong(0)
+            val key = cursor.getString(1).orEmpty()
+            val name = cursor.getString(2).orEmpty()
+            return ContactIdentity(stableContactId(key, id), id, key, name)
+        }
+        return null
     }
 
     private fun resolveContactId(contactId: Long, lookupKey: String): Long? {

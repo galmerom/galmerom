@@ -57,9 +57,27 @@ fun HomePane(
     onOpenMenu: () -> Unit,
     onCall: (Tile) -> Unit,
     onWhatsApp: (Tile) -> Unit,
+    onEdit: (Tile) -> Unit,
+    onExitEdit: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+        if (ui.editMode) {
+            Row(
+                Modifier.fillMaxWidth().padding(top = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    stringResource(R.string.edit_mode_banner),
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Button(onClick = onExitEdit) {
+                    Text(stringResource(R.string.edit_mode_exit))
+                }
+            }
+        }
         if (ui.contactsDenied) {
             Text(
                 stringResource(R.string.banner_contacts),
@@ -87,8 +105,10 @@ fun HomePane(
                 tileRatio = ui.tileRatio,
                 showBadge = ui.showBadge,
                 shortNameSp = ui.shortNameSp,
+                editMode = ui.editMode,
                 onCall = onCall,
                 onWhatsApp = onWhatsApp,
+                onEdit = onEdit,
                 modifier = Modifier.weight(1f).padding(top = 12.dp),
             )
         }
@@ -128,8 +148,10 @@ private fun ContactGrid(
     tileRatio: Float,
     showBadge: Boolean,
     shortNameSp: Int,
+    editMode: Boolean,
     onCall: (Tile) -> Unit,
     onWhatsApp: (Tile) -> Unit,
+    onEdit: (Tile) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val rows = tiles.chunked(columns)
@@ -148,8 +170,10 @@ private fun ContactGrid(
                         showBadge = showBadge,
                         shortNameSp = shortNameSp,
                         tileRatio = tileRatio,
+                        editMode = editMode,
                         onCall = { onCall(tile) },
                         onWhatsApp = { onWhatsApp(tile) },
+                        onEdit = { onEdit(tile) },
                         modifier = Modifier.weight(1f),
                     )
                 }
@@ -166,8 +190,10 @@ private fun ContactTile(
     showBadge: Boolean,
     shortNameSp: Int,
     tileRatio: Float,
+    editMode: Boolean,
     onCall: () -> Unit,
     onWhatsApp: () -> Unit,
+    onEdit: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val letter = initialLetter(tile.shortName)
@@ -185,10 +211,10 @@ private fun ContactTile(
                 .background(MaterialTheme.colorScheme.surface)
                 .border(1.dp, MaterialTheme.colorScheme.outlineVariant, MaterialTheme.shapes.large)
                 .combinedClickable(
-                    onClick = {},
-                    onLongClick = onCall,
-                    onDoubleClick = onWhatsApp,
-                    onLongClickLabel = callLabel,
+                    onClick = { if (editMode) onEdit() },
+                    onLongClick = if (editMode) null else onCall,
+                    onDoubleClick = if (editMode) null else onWhatsApp,
+                    onLongClickLabel = if (editMode) null else callLabel,
                 ),
         ) {
             Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {

@@ -13,7 +13,7 @@ import java.io.FileOutputStream
 class TilePhotos(context: Context) {
     private val directory = File(context.filesDir, "tile-photos").apply { mkdirs() }
 
-    fun importCenterSquare(context: Context, contactId: String, source: Uri): String? {
+    fun importCenterSquare(context: Context, contactId: String, source: Uri, staged: Boolean = false): String? {
         val bitmap = decodeOriented(context, source) ?: return null
         val crop = centerSquareCrop(bitmap.width, bitmap.height) ?: return null
         val square = Bitmap.createBitmap(bitmap, crop.x, crop.y, crop.side, crop.side)
@@ -22,7 +22,7 @@ class TilePhotos(context: Context) {
         } else {
             Bitmap.createScaledBitmap(square, MAX_EDGE, MAX_EDGE, true)
         }
-        val name = fileName(contactId)
+        val name = if (staged) stageFileName(contactId) else fileName(contactId)
         FileOutputStream(File(directory, name)).use { out ->
             if (!scaled.compress(Bitmap.CompressFormat.JPEG, 90, out)) return null
         }
@@ -38,10 +38,27 @@ class TilePhotos(context: Context) {
         return file.toURI().toString()
     }
 
+    fun promoteStaged(stageName: String, contactId: String): String? {
+        val source = File(directory, stageName)
+        if (!source.isFile) return null
+        val destName = fileName(contactId)
+        val dest = File(directory, destName)
+        if (source.absolutePath != dest.absolutePath) {
+            if (dest.exists() && !dest.delete()) return null
+            if (!source.renameTo(dest)) {
+                source.copyTo(dest, overwrite = true)
+                source.delete()
+            }
+        }
+        return destName.takeIf { dest.isFile || File(directory, destName).isFile }
+    }
+
     fun delete(name: String?) {
         if (name.isNullOrBlank()) return
         File(directory, name).delete()
     }
+
+    private fun stageFileName(contactId: String) = "stage-${fileName(contactId)}"
 
     private fun fileName(contactId: String): String {
         val safe = contactId.replace(Regex("[^A-Za-z0-9._-]"), "_").take(80).ifBlank { "tile" }

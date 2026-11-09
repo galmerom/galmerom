@@ -1,5 +1,9 @@
 package com.galmerom.quickdial.ui
 
+import android.graphics.BitmapFactory
+import android.net.Uri
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -8,6 +12,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
@@ -26,18 +32,29 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.foundation.Image
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.galmerom.quickdial.R
+import com.galmerom.quickdial.domain.initialLetter
+import java.io.File
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -141,13 +158,23 @@ fun RenameDialog(
     onGallery: () -> Unit,
     onCamera: () -> Unit,
     onRestorePhoto: () -> Unit,
+    onRemove: () -> Unit,
 ) {
     var text by remember(prompt.rowId, prompt.initial) { mutableStateOf(prompt.initial) }
+    var confirmRemove by remember(prompt.rowId) { mutableStateOf(false) }
+    val preview = when {
+        !prompt.restoreOriginal && prompt.stagedPhotoUri != null -> prompt.stagedPhotoUri
+        prompt.restoreOriginal -> prompt.originalPhotoUri
+        else -> prompt.customPhotoUri ?: prompt.originalPhotoUri
+    }
+    val restoreEnabled = !prompt.restoreOriginal && (prompt.hasCustomPhoto || prompt.stagedPhotoUri != null)
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.edit_short_name), style = MaterialTheme.typography.headlineSmall) },
         text = {
-            Column {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                EditorPhoto(preview, initialLetter(prompt.initial.ifBlank { prompt.displayName }))
+                Spacer(Modifier.height(12.dp))
                 OutlinedTextField(
                     value = text,
                     onValueChange = { text = it.take(24) },
@@ -166,10 +193,18 @@ fun RenameDialog(
                 Button(onClick = onCamera, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
                     Text(stringResource(R.string.photo_camera), style = MaterialTheme.typography.titleMedium)
                 }
-                if (prompt.hasCustomPhoto) {
+                Spacer(Modifier.height(8.dp))
+                TextButton(
+                    onClick = onRestorePhoto,
+                    enabled = restoreEnabled,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                ) {
+                    Text(stringResource(R.string.photo_restore), style = MaterialTheme.typography.titleMedium)
+                }
+                if (prompt.onGrid) {
                     Spacer(Modifier.height(8.dp))
-                    TextButton(onClick = onRestorePhoto, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
-                        Text(stringResource(R.string.photo_restore), style = MaterialTheme.typography.titleMedium)
+                    TextButton(onClick = { confirmRemove = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
+                        Text(stringResource(R.string.remove_from_list), style = MaterialTheme.typography.titleMedium)
                     }
                 }
             }
@@ -185,4 +220,62 @@ fun RenameDialog(
             }
         },
     )
+    if (confirmRemove) {
+        AlertDialog(
+            onDismissRequest = { confirmRemove = false },
+            title = { Text(stringResource(R.string.remove_confirm_title), style = MaterialTheme.typography.headlineSmall) },
+            text = {
+                Text(
+                    stringResource(R.string.remove_confirm_body, prompt.displayName),
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmRemove = false
+                    onRemove()
+                }) { Text(stringResource(R.string.remove_confirm_yes)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmRemove = false }) { Text(stringResource(R.string.cancel)) }
+            },
+        )
+    }
+}
+
+@Composable
+private fun EditorPhoto(photoUri: String?, letter: String) {
+    val context = LocalContext.current
+    val bitmap by produceState<android.graphics.Bitmap?>(null, photoUri) {
+        value = withContext(Dispatchers.IO) {
+            if (photoUri.isNullOrBlank()) {
+                null
+            } else {
+                runCatching {
+                    val parsed = Uri.parse(photoUri)
+                    if (parsed.scheme == "file") {
+                        BitmapFactory.decodeFile(parsed.path ?: File(photoUri).path)
+                    } else {
+                        context.contentResolver.openInputStream(parsed)?.use { BitmapFactory.decodeStream(it) }
+                    }
+                }.getOrNull()
+            }
+        }
+    }
+    Box(
+        Modifier.size(140.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary),
+        contentAlignment = Alignment.Center,
+    ) {
+        val image = bitmap
+        if (image != null) {
+            Image(
+                bitmap = image.asImageBitmap(),
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize().clip(CircleShape),
+                contentScale = ContentScale.Crop,
+            )
+        } else {
+            Text(letter, color = Color.White, style = MaterialTheme.typography.headlineMedium)
+        }
+    }
 }

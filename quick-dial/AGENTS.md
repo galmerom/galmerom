@@ -10,8 +10,9 @@ Hebrew, right-to-left Android app for Gal's Pixel. Package `com.galmerom.quickdi
 
 ## Where things live
 
-- `ui/HomePane.kt` — the grid, directly under the top bar. Long-press calls (3-second "מתקשר אל:" countdown with a large Cancel). Double-tap opens WhatsApp. The photo is a square the full tile width; the short name sits under it and scales with the tile and the small/medium/large setting. The slider sets height/width, but the photo never shrinks below a square.
-- `ui/ContactsPane.kt` — choose contacts (search, checkbox, one number) and edit a tile (short name, gallery or camera photo, "חזרה לתמונה המקורית").
+- `ui/HomePane.kt` — the grid, directly under the top bar. Long-press calls (3-second "מתקשר אל:" countdown with a large Cancel). Double-tap opens WhatsApp. Edit mode ("מצב עריכה", not saved; off when the app is left) makes a tap open the tile editor and disables call and WhatsApp. The photo is a square the full tile width; the short name sits under it and scales with the tile and the small/medium/large setting. The slider sets height/width, but the photo never shrinks below a square.
+- `ui/ContactsPane.kt` — choose contacts (search, checkbox, one number) and the tile editor (photo preview, short name, gallery or camera, "חזרה לתמונה המקורית" always shown and disabled without a custom photo, remove from the list). A new photo is previewed before save.
+- Tiles are keyed by the current `LOOKUP_KEY` (`Contacts.lookupContact`), with a fallback to the normalized phone number. `domain/TileIdentity.kt` merges duplicates and keeps the short name, custom photo, and frozen position. The picker stays checked for a contact that is already on the grid.
 - `ui/TilePhotoCapture.kt` — Android photo picker and camera. Create the camera file first and keep its URI in `rememberSaveable` so it survives the camera activity.
 - `ui/ReorderPane.kt` — left/right reorder, only while frozen.
 - `ui/QuickDialApp.kt` — drawer, themes, call countdown, permission messages.
