@@ -22,8 +22,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -36,7 +34,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -57,14 +54,12 @@ import kotlinx.coroutines.withContext
 @Composable
 fun HomePane(
     ui: HomeUi,
-    onVoice: () -> Unit,
     onOpenMenu: () -> Unit,
     onCall: (Tile) -> Unit,
     onWhatsApp: (Tile) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier.fillMaxSize().padding(horizontal = 16.dp)) {
-        VoiceButton(listening = ui.listening, onClick = onVoice)
         if (ui.contactsDenied) {
             Text(
                 stringResource(R.string.banner_contacts),
@@ -97,31 +92,6 @@ fun HomePane(
                 modifier = Modifier.weight(1f).padding(top = 12.dp),
             )
         }
-    }
-}
-
-@Composable
-private fun VoiceButton(listening: Boolean, onClick: () -> Unit) {
-    Button(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth().padding(top = 8.dp).height(88.dp),
-        shape = MaterialTheme.shapes.large,
-    ) {
-        Icon(
-            painterResource(R.drawable.ic_mic),
-            contentDescription = null,
-            modifier = Modifier.padding(end = 8.dp),
-        )
-        Text(
-            text = stringResource(if (listening) R.string.voice_listening else R.string.voice_idle),
-            style = MaterialTheme.typography.titleLarge,
-            textAlign = TextAlign.Center,
-        )
-    }
-    if (listening) {
-        LinearProgressIndicator(
-            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-        )
     }
 }
 

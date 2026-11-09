@@ -20,8 +20,6 @@ import com.galmerom.quickdial.data.WhatsAppTarget
 import com.galmerom.quickdial.data.phoneLabel
 import com.galmerom.quickdial.domain.ContactNumbers
 import com.galmerom.quickdial.domain.DialTheme
-import com.galmerom.quickdial.domain.NameMatch
-import com.galmerom.quickdial.domain.NamedContact
 import com.galmerom.quickdial.domain.NumberOption
 import com.galmerom.quickdial.domain.QuickDialSettings
 import com.galmerom.quickdial.domain.SavedContact
@@ -32,7 +30,6 @@ import com.galmerom.quickdial.domain.tileRatio
 import com.galmerom.quickdial.domain.cleanShortName
 import com.galmerom.quickdial.domain.defaultShortName
 import com.galmerom.quickdial.domain.distinctNumbers
-import com.galmerom.quickdial.domain.matchHypotheses
 import com.galmerom.quickdial.domain.matchesContactQuery
 import com.galmerom.quickdial.domain.nameOrder
 import com.galmerom.quickdial.domain.orderedIds
@@ -57,15 +54,11 @@ import java.time.ZoneId
 
 enum class Screen { Home, Contacts, Reorder }
 
-enum class NoticeKind { 
-    NoMatch,
-    SpeechFailed,
-    SpeechUnavailable,
+enum class NoticeKind {
     WhatsAppMissing,
     WhatsAppAppMissing,
     CallFailed,
     NoNumber,
-    MicDenied,
     CallDenied,
     ContactsDenied,
     CameraDenied,
@@ -100,8 +93,6 @@ data class HomeUi(
     val shortNameSp: Int = ShortNameSize.Medium.sp,
     val theme: DialTheme = DialTheme.Blue,
     val callPhase: CallPhase = CallPhase.Idle,
-    val choices: List<Tile> = emptyList(),
-    val listening: Boolean = false,
     val screen: Screen = Screen.Home,
     val contactsDenied: Boolean = false,
     val callLogDenied: Boolean = false,
@@ -156,8 +147,6 @@ class QuickDialViewModel(app: Application) : AndroidViewModel(app) {
     private var ready = false
     private var screen = Screen.Home
     private var callPhase: CallPhase = CallPhase.Idle
-    private var choices: List<Tile> = emptyList()
-    private var listening = false
     private var query = ""
     private var numberPrompt: NumberPrompt? = null
     private var renamePrompt: RenamePrompt? = null
@@ -455,37 +444,7 @@ class QuickDialViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun setListening(value: Boolean) {
-        listening = value
-        publish()
-    }
-
-    fun onSpeech(phrases: List<String>) {
-        listening = false
-        val tiles = currentTiles()
-        val named = tiles.map { NamedContact(it.id, it.displayName, it.shortName) }
-        when (val match = matchHypotheses(phrases, named)) {
-            is NameMatch.One -> {
-                val tile = tiles.find { it.id == match.id }
-                if (tile == null) notify(NoticeKind.NoMatch, phrases.firstOrNull { it.isNotBlank() })
-                else requestCall(tile)
-            }
-            is NameMatch.Many -> {
-                choices = match.ids.mapNotNull { id -> tiles.find { it.id == id } }
-                if (choices.size < 2) {
-                    val only = choices.singleOrNull()
-                    choices = emptyList()
-                    if (only == null) notify(NoticeKind.NoMatch, phrases.firstOrNull { it.isNotBlank() })
-                    else requestCall(only)
-                }
-            }
-            NameMatch.None -> notify(NoticeKind.NoMatch, phrases.firstOrNull { it.isNotBlank() })
-        }
-        publish()
-    }
-
     fun requestCall(tile: Tile) {
-        choices = emptyList()
         callPhase = CallPhase.NeedsPermission(tile)
         publish()
     }
@@ -506,16 +465,6 @@ class QuickDialViewModel(app: Application) : AndroidViewModel(app) {
 
     fun cancelCall() {
         callPhase = CallPhase.Idle
-        publish()
-    }
-
-    fun pickChoice(tile: Tile) {
-        choices = emptyList()
-        requestCall(tile)
-    }
-
-    fun dismissChoices() {
-        choices = emptyList()
         publish()
     }
 
@@ -612,8 +561,6 @@ class QuickDialViewModel(app: Application) : AndroidViewModel(app) {
             shortNameSp = ShortNameSize.fromKey(latestSettings.shortNameSize).sp,
             theme = DialTheme.fromKey(latestSettings.theme),
             callPhase = callPhase,
-            choices = choices,
-            listening = listening,
             screen = screen,
             contactsDenied = ready && hasSaved && !contactsGranted,
             callLogDenied = ready && hasSaved && !callLogGranted,

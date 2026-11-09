@@ -91,7 +91,6 @@ fun QuickDialApp(viewModel: QuickDialViewModel = viewModel()) {
     val scope = rememberCoroutineScope()
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     var notice by remember { mutableStateOf<NoticeEvent?>(null) }
-    var session by remember { mutableStateOf<HebrewSpeechSession?>(null) }
     var askedCallLog by remember { mutableStateOf(false) }
     var askedContacts by remember { mutableStateOf(false) }
     var openPickerOnGrant by remember { mutableStateOf(false) }
@@ -105,7 +104,6 @@ fun QuickDialApp(viewModel: QuickDialViewModel = viewModel()) {
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
     LaunchedEffect(Unit) { viewModel.refresh() }
-    DisposableEffect(session) { onDispose { session?.stop() } }
 
     LaunchedEffect(Unit) {
         viewModel.notices.collect { notice = it }
@@ -137,10 +135,6 @@ fun QuickDialApp(viewModel: QuickDialViewModel = viewModel()) {
 
     val callPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         viewModel.onCallPermissionResult(granted)
-    }
-    val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) startVoice(context, viewModel) { session = it }
-        else viewModel.notify(NoticeKind.MicDenied)
     }
     val callLogPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         viewModel.refresh()
@@ -219,17 +213,6 @@ fun QuickDialApp(viewModel: QuickDialViewModel = viewModel()) {
                     ) { padding ->
                         HomePane(
                             ui = ui,
-                            onVoice = {
-                                if (ui.listening) {
-                                    session?.stop()
-                                    session = null
-                                    viewModel.setListening(false)
-                                } else if (hasPermission(context, Manifest.permission.RECORD_AUDIO)) {
-                                    startVoice(context, viewModel) { session = it }
-                                } else {
-                                    micPermission.launch(Manifest.permission.RECORD_AUDIO)
-                                }
-                            },
                             onOpenMenu = { scope.launch { drawerState.open() } },
                             onCall = viewModel::requestCall,
                             onWhatsApp = viewModel::onWhatsApp,
@@ -272,9 +255,6 @@ fun QuickDialApp(viewModel: QuickDialViewModel = viewModel()) {
                         placeCall(context, tile.phoneNumber) { viewModel.notify(NoticeKind.CallFailed) }
                     },
                 )
-            }
-            if (ui.choices.isNotEmpty() && counting == null) {
-                ChoiceDialog(ui.choices, onPick = viewModel::pickChoice, onDismiss = viewModel::dismissChoices)
             }
             notice?.let { event ->
                 NoticeDialog(
@@ -483,30 +463,6 @@ private fun DialTheme.label(): String = when (this) {
     DialTheme.Sage -> stringResource(R.string.theme_sage)
     DialTheme.Lilac -> stringResource(R.string.theme_lilac)
     DialTheme.Warm -> stringResource(R.string.theme_warm)
-}
-
-private fun startVoice(context: Context, viewModel: QuickDialViewModel, hold: (HebrewSpeechSession) -> Unit) {
-    viewModel.setListening(true)
-    val speech = HebrewSpeechSession(
-        context = context,
-        onResult = { phrases ->
-            viewModel.setListening(false)
-            viewModel.onSpeech(phrases)
-        },
-        onError = { problem ->
-            viewModel.setListening(false)
-            viewModel.notify(
-                when (problem) {
-                    SpeechProblem.Unavailable -> NoticeKind.SpeechUnavailable
-                    SpeechProblem.Permission -> NoticeKind.MicDenied
-                    SpeechProblem.Failed -> NoticeKind.SpeechFailed
-                },
-            )
-        },
-        onIdle = { viewModel.setListening(false) },
-    )
-    hold(speech)
-    speech.start()
 }
 
 private fun placeCall(context: Context, number: String, onFailed: () -> Unit) {

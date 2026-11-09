@@ -4,10 +4,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
@@ -72,49 +69,12 @@ fun CallCountdownDialog(name: String, onCancel: () -> Unit, onFinished: () -> Un
 }
 
 @Composable
-fun ChoiceDialog(choices: List<Tile>, onPick: (Tile) -> Unit, onDismiss: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.choose_who), style = MaterialTheme.typography.headlineSmall) },
-        text = {
-            Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
-                choices.forEach { tile ->
-                    TextButton(
-                        onClick = { onPick(tile) },
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp),
-                    ) {
-                        Column(Modifier.fillMaxWidth()) {
-                            Text(tile.shortName, style = MaterialTheme.typography.titleLarge)
-                            Text(
-                                "${tile.displayName} · ${tile.phoneNumber}",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {},
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel), style = MaterialTheme.typography.titleMedium) }
-        },
-    )
-}
-
-@Composable
 fun NoticeDialog(event: NoticeEvent, onDismiss: () -> Unit, onSettings: () -> Unit) {
-    val title = stringResource(event.kind.titleRes())
-    val body = stringResource(event.kind.bodyRes())
-    val heard = event.detail?.takeIf { event.kind == NoticeKind.NoMatch && it.isNotBlank() }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(title, style = MaterialTheme.typography.headlineSmall) },
+        title = { Text(stringResource(event.kind.titleRes()), style = MaterialTheme.typography.headlineSmall) },
         text = {
-            Text(
-                if (heard == null) body else body + "\n\n" + stringResource(R.string.heard, heard),
-                style = MaterialTheme.typography.bodyLarge,
-            )
+            Text(stringResource(event.kind.bodyRes()), style = MaterialTheme.typography.bodyLarge)
         },
         confirmButton = {
             if (event.kind.offersSettings) {
@@ -132,13 +92,9 @@ fun NoticeDialog(event: NoticeEvent, onDismiss: () -> Unit, onSettings: () -> Un
 }
 
 private fun NoticeKind.titleRes(): Int = when (this) {
-    NoticeKind.NoMatch -> R.string.no_match_title
-    NoticeKind.SpeechFailed -> R.string.speech_failed_title
-    NoticeKind.SpeechUnavailable -> R.string.speech_unavailable_title
     NoticeKind.WhatsAppMissing, NoticeKind.WhatsAppAppMissing -> R.string.whatsapp_missing_title
     NoticeKind.CallFailed -> R.string.call_failed_title
     NoticeKind.NoNumber -> R.string.no_number_title
-    NoticeKind.MicDenied -> R.string.mic_denied_title
     NoticeKind.CallDenied -> R.string.call_denied_title
     NoticeKind.ContactsDenied -> R.string.contacts_denied_title
     NoticeKind.CameraDenied -> R.string.camera_denied_title
@@ -146,14 +102,10 @@ private fun NoticeKind.titleRes(): Int = when (this) {
 }
 
 private fun NoticeKind.bodyRes(): Int = when (this) {
-    NoticeKind.NoMatch -> R.string.no_match_body
-    NoticeKind.SpeechFailed -> R.string.speech_failed_body
-    NoticeKind.SpeechUnavailable -> R.string.speech_unavailable_body
     NoticeKind.WhatsAppMissing -> R.string.whatsapp_missing_body
     NoticeKind.WhatsAppAppMissing -> R.string.whatsapp_app_missing_body
     NoticeKind.CallFailed -> R.string.call_failed_body
     NoticeKind.NoNumber -> R.string.no_number_body
-    NoticeKind.MicDenied -> R.string.mic_denied_body
     NoticeKind.CallDenied -> R.string.call_denied_body
     NoticeKind.ContactsDenied -> R.string.contacts_denied_body
     NoticeKind.CameraDenied -> R.string.camera_denied_body
@@ -161,7 +113,6 @@ private fun NoticeKind.bodyRes(): Int = when (this) {
 }
 
 private val NoticeKind.offersSettings: Boolean
-    get() = this == NoticeKind.MicDenied ||
-        this == NoticeKind.CallDenied ||
+    get() = this == NoticeKind.CallDenied ||
         this == NoticeKind.ContactsDenied ||
         this == NoticeKind.CameraDenied

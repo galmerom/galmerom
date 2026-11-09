@@ -1,6 +1,6 @@
 # חיוג מהיר
 
-A Hebrew, right-to-left Android app for Gal's Pixel. A wide button listens for a contact name and places the call after a three-second cancel window. The grid below is the speed-dial list.
+A Hebrew, right-to-left Android app for Gal's Pixel. Long-press a tile to call after a three-second cancel window. Double-tap opens WhatsApp. The grid is the speed-dial list.
 
 Nothing leaves the phone. Chosen contacts, short names, column count, freeze order, and theme live in DataStore. Photos, phone numbers, WhatsApp rows, and outgoing-call counts are read from the device.
 
