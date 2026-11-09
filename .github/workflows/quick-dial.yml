@@ -1,0 +1,75 @@
+name: Quick Dial
+
+on:
+  push:
+    paths:
+      - "quick-dial/**"
+      - ".github/workflows/quick-dial.yml"
+  pull_request:
+    paths:
+      - "quick-dial/**"
+      - ".github/workflows/quick-dial.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: quick-dial-latest-release
+  cancel-in-progress: false
+
+jobs:
+  assemble-debug:
+    name: Assemble debug APK
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: quick-dial
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Build debug APK
+        run: ./gradlew assembleDebug --stacktrace --no-daemon
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: quick-dial-debug-apk
+          path: quick-dial/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Publish pre-release
+        if: github.event_name == 'push'
+        working-directory: quick-dial
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          test -f app/build/outputs/apk/debug/app-debug.apk
+          cp app/build/outputs/apk/debug/app-debug.apk "${RUNNER_TEMP}/quick-dial.apk"
+          NOTES="Debug APK from ${GITHUB_SHA}."
+          if gh release view quick-dial-latest >/dev/null 2>&1; then
+            gh release upload quick-dial-latest "${RUNNER_TEMP}/quick-dial.apk" --clobber
+            gh release edit quick-dial-latest \
+              --prerelease \
+              --title "Quick Dial latest debug" \
+              --notes "${NOTES}"
+          else
+            gh api --method DELETE "repos/${GH_REPO}/git/refs/tags/quick-dial-latest" >/dev/null 2>&1 || true
+            gh release create quick-dial-latest "${RUNNER_TEMP}/quick-dial.apk" \
+              --prerelease \
+              --target "${GITHUB_SHA}" \
+              --title "Quick Dial latest debug" \
+              --notes "${NOTES}"
+          fi
