@@ -20,6 +20,7 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -28,6 +29,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDirection
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
@@ -41,8 +46,13 @@ import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.galmerom.botbekalut.domain.Block
+import com.galmerom.botbekalut.domain.BlockDirection
 import com.galmerom.botbekalut.domain.Inline
+import com.galmerom.botbekalut.domain.blockDirection
+import com.galmerom.botbekalut.domain.inlineDirectionSource
+import com.galmerom.botbekalut.domain.ltrIsolate
 import com.galmerom.botbekalut.domain.parseMarkdown
+import com.galmerom.botbekalut.domain.splitInlineLines
 
 @Composable
 fun MarkdownBlocks(
@@ -57,8 +67,13 @@ fun MarkdownBlocks(
     Column(modifier) {
         blocks.forEach { block ->
             when (block) {
-                is Block.Paragraph -> InlineText(block.inlines, MaterialTheme.typography.bodyLarge, linkColor, context)
-                is Block.Heading -> InlineText(
+                is Block.Paragraph -> DirectedLines(
+                    block.inlines,
+                    MaterialTheme.typography.bodyLarge,
+                    linkColor,
+                    context,
+                )
+                is Block.Heading -> DirectedLines(
                     block.inlines,
                     when (block.level) {
                         1 -> MaterialTheme.typography.headlineSmall
@@ -68,44 +83,69 @@ fun MarkdownBlocks(
                     linkColor,
                     context,
                 )
-                is Block.Quote -> Row(
-                    Modifier
-                        .padding(vertical = 4.dp)
-                        .height(androidx.compose.foundation.layout.IntrinsicSize.Min),
-                ) {
-                    Box(
-                        Modifier
-                            .padding(end = 10.dp)
-                            .width(4.dp)
-                            .fillMaxHeight()
-                            .background(MaterialTheme.colorScheme.primary),
-                    )
-                    Column(Modifier.weight(1f)) {
-                        InlineText(block.inlines, MaterialTheme.typography.bodyLarge, linkColor, context)
+                is Block.Quote -> Column(Modifier.padding(vertical = 4.dp)) {
+                    splitInlineLines(block.inlines).forEach { line ->
+                        DirectedRow(blockDirection(inlineDirectionSource(line))) {
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .height(androidx.compose.foundation.layout.IntrinsicSize.Min),
+                            ) {
+                                Box(
+                                    Modifier
+                                        .padding(end = 10.dp)
+                                        .width(4.dp)
+                                        .fillMaxHeight()
+                                        .background(MaterialTheme.colorScheme.primary),
+                                )
+                                InlineText(
+                                    line,
+                                    MaterialTheme.typography.bodyLarge,
+                                    linkColor,
+                                    context,
+                                    Modifier.weight(1f),
+                                )
+                            }
+                        }
                     }
                 }
                 is Block.BulletList -> Column(Modifier.padding(vertical = 2.dp)) {
                     block.items.forEachIndexed { index, item ->
-                        Row(Modifier.padding(vertical = 2.dp)) {
-                            Text(
-                                if (block.ordered) "${index + 1}." else "•",
-                                style = MaterialTheme.typography.bodyLarge,
-                                modifier = Modifier.padding(end = 8.dp),
-                            )
-                            InlineText(item, MaterialTheme.typography.bodyLarge, linkColor, context, Modifier.weight(1f))
+                        DirectedRow(blockDirection(inlineDirectionSource(item))) {
+                            Row(Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+                                Text(
+                                    if (block.ordered) "${index + 1}." else "•",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    modifier = Modifier.padding(end = 8.dp),
+                                )
+                                InlineText(
+                                    item,
+                                    MaterialTheme.typography.bodyLarge,
+                                    linkColor,
+                                    context,
+                                    Modifier.weight(1f),
+                                )
+                            }
                         }
                     }
                 }
-                is Block.Code -> SelectionContainer {
-                    Text(
-                        block.text,
-                        style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState())
-                            .background(MaterialTheme.colorScheme.surfaceVariant)
-                            .padding(12.dp),
-                    )
+                is Block.Code -> DirectedRow(blockDirection(block.text)) {
+                    val textDirection = LocalTextDirection.current
+                    SelectionContainer {
+                        Text(
+                            block.text,
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontFamily = FontFamily.Monospace,
+                                textDirection = textDirection,
+                                textAlign = TextAlign.Start,
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState())
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                                .padding(12.dp),
+                        )
+                    }
                 }
                 is Block.Table -> MarkdownTable(
                     table = block,
@@ -129,6 +169,37 @@ fun MarkdownBlocks(
 }
 
 @Composable
+private fun DirectedLines(
+    inlines: List<Inline>,
+    style: androidx.compose.ui.text.TextStyle,
+    linkColor: Color,
+    context: Context,
+) {
+    val lines = remember(inlines) { splitInlineLines(inlines) }
+    Column(Modifier.fillMaxWidth()) {
+        lines.forEach { line ->
+            DirectedRow(blockDirection(inlineDirectionSource(line))) {
+                InlineText(line, style, linkColor, context, Modifier.fillMaxWidth())
+            }
+        }
+    }
+}
+
+@Composable
+private fun DirectedRow(direction: BlockDirection, content: @Composable () -> Unit) {
+    val layout = if (direction == BlockDirection.Ltr) LayoutDirection.Ltr else LayoutDirection.Rtl
+    val textDirection = if (direction == BlockDirection.Ltr) TextDirection.Ltr else TextDirection.Rtl
+    CompositionLocalProvider(
+        LocalLayoutDirection provides layout,
+        LocalTextDirection provides textDirection,
+    ) {
+        content()
+    }
+}
+
+private val LocalTextDirection = androidx.compose.runtime.staticCompositionLocalOf { TextDirection.Content }
+
+@Composable
 private fun InlineText(
     inlines: List<Inline>,
     style: androidx.compose.ui.text.TextStyle,
@@ -136,12 +207,17 @@ private fun InlineText(
     context: Context,
     modifier: Modifier = Modifier,
 ) {
+    val textDirection = LocalTextDirection.current
     val annotated = remember(inlines, linkColor) {
         buildAnnotatedString {
             appendInlines(inlines, linkColor) { url -> openChatLink(context, url) }
         }
     }
-    Text(annotated, style = style, modifier = modifier)
+    Text(
+        annotated,
+        style = style.copy(textDirection = textDirection, textAlign = TextAlign.Start),
+        modifier = modifier,
+    )
 }
 
 private fun AnnotatedString.Builder.appendInlines(
@@ -160,7 +236,7 @@ private fun AnnotatedString.Builder.appendInlines(
                         background = Color(0xFFE8EEF5),
                     ),
                 )
-                append(inline.value)
+                append(ltrIsolate(inline.value))
                 pop()
             }
             is Inline.Style -> {
@@ -186,7 +262,9 @@ private fun AnnotatedString.Builder.appendInlines(
                         linkInteractionListener = { open(inline.url) },
                     ),
                 ) {
+                    append("\u2066")
                     appendInlines(inline.children, linkColor, open)
+                    append("\u2069")
                 }
             }
         }

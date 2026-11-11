@@ -19,11 +19,16 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDirection
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
@@ -37,7 +42,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.galmerom.botbekalut.domain.Block
+import com.galmerom.botbekalut.domain.BlockDirection
 import com.galmerom.botbekalut.domain.Inline
+import com.galmerom.botbekalut.domain.blockDirection
+import com.galmerom.botbekalut.domain.ltrIsolate
 import com.galmerom.botbekalut.domain.parseInlines
 
 @Composable
@@ -115,26 +123,31 @@ private fun TableCell(
             pop()
         }
     }
-    Box(
-        modifier
-            .then(
-                if (sticky) {
-                    Modifier.widthIn(min = 108.dp, max = 210.dp)
-                } else {
-                    Modifier.widthIn(min = 96.dp)
-                },
+    val direction = blockDirection(text)
+    val layout = if (direction == BlockDirection.Ltr) LayoutDirection.Ltr else LayoutDirection.Rtl
+    val textDirection = if (direction == BlockDirection.Ltr) TextDirection.Ltr else TextDirection.Rtl
+    CompositionLocalProvider(LocalLayoutDirection provides layout) {
+        Box(
+            modifier
+                .then(
+                    if (sticky) {
+                        Modifier.widthIn(min = 108.dp, max = 210.dp)
+                    } else {
+                        Modifier.widthIn(min = 96.dp)
+                    },
+                )
+                .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant)
+                .padding(horizontal = 8.dp, vertical = 8.dp),
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            Text(
+                annotated,
+                style = style.copy(textDirection = textDirection, textAlign = TextAlign.Start),
+                maxLines = if (sticky) 4 else 2,
+                overflow = TextOverflow.Ellipsis,
+                softWrap = sticky,
             )
-            .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant)
-            .padding(horizontal = 8.dp, vertical = 8.dp),
-        contentAlignment = Alignment.CenterStart,
-    ) {
-        Text(
-            annotated,
-            style = style,
-            maxLines = if (sticky) 4 else 2,
-            overflow = TextOverflow.Ellipsis,
-            softWrap = sticky,
-        )
+        }
     }
 }
 
@@ -147,7 +160,7 @@ private fun AnnotatedString.Builder.appendInlinesForTable(
         when (inline) {
             is Inline.Text -> append(inline.value)
             Inline.LineBreak -> append(" ")
-            is Inline.Code -> append(inline.value)
+            is Inline.Code -> append(ltrIsolate(inline.value))
             is Inline.Style -> appendInlinesForTable(inline.children, linkColor, context)
             is Inline.Link -> {
                 withLink(
@@ -162,7 +175,9 @@ private fun AnnotatedString.Builder.appendInlinesForTable(
                         linkInteractionListener = { openChatLink(context, inline.url) },
                     ),
                 ) {
+                    append("\u2066")
                     appendInlinesForTable(inline.children, linkColor, context)
+                    append("\u2069")
                 }
             }
         }

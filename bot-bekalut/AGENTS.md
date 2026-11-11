@@ -80,9 +80,13 @@ Debug (and the sideload APK) are signed with the committed key `app/bot-bekalut-
 - Launcher badge shows a number.
 - Subscribe to topic `bot_{botId}` for each non-muted bot after sign-in, and also write the device token under `users/{uid}/fcmTokens/{tokenId}`.
 
+## Text direction
+
+Chat blocks do not all follow the app's RTL chrome. `domain/TextDirection.kt` (`blockDirection`) picks a direction from the first strong character: Hebrew or Arabic is RTL, Latin is LTR. It skips leading emoji, digits, punctuation, markdown markers, and `http`/`https` URLs. Each paragraph line, heading, list item, quote line, and table cell is independent, so an English paragraph and a Hebrew line in the same message stay in their own directions. List markers sit on the start side of that item. Inline code and URLs are LTR isolates inside either direction. Rendering is in `ui/MessageView.kt` and `ui/TableView.kt`. The top bar, bot buttons, side menu, and routine titles stay RTL.
+
 ## Icon
 
-Launcher icon: the shape of the Grok Bot mascot, a clear friendly blue (similar in spirit to Sharon's bot), looking as if it is reading a book. Light, simple, readable at small sizes. A solid first pass is enough; it may be refined later.
+Launcher art is the blue Grok-style character reading a book. Source image: `design/icon-source.jpg`. Adaptive background is the light color sampled from that image (`#C0D3E6`, `drawable/ic_launcher_background.xml`). The foreground (`drawable-*/ic_launcher_foreground.png`) is the character and book, scaled into the 66dp safe zone so circle masks do not clip it. Legacy `mipmap-*/ic_launcher.png` and `ic_launcher_round.png` cover mdpi through xxxhdpi. The monochrome layer is a head-and-book silhouette (`drawable-*/ic_launcher_monochrome.png`). A 512px Play-style icon is `store-icon-512.png`.
 
 ## Build done when
 
