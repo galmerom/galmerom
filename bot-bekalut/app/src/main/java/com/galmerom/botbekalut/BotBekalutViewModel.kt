@@ -23,6 +23,7 @@ import com.galmerom.botbekalut.domain.mergeKnownBots
 import com.galmerom.botbekalut.domain.orderedCatalog
 import com.galmerom.botbekalut.domain.topicFor
 import com.galmerom.botbekalut.domain.visibleBots
+import com.galmerom.botbekalut.domain.visibleMessages
 import com.galmerom.botbekalut.fcm.ChatEvents
 import com.galmerom.botbekalut.fcm.NotificationCenter
 import com.galmerom.botbekalut.fcm.TokenStore
@@ -236,6 +237,17 @@ class BotBekalutViewModel(app: Application) : AndroidViewModel(app) {
         NotificationCenter.clearBot(getApplication(), botId)
     }
 
+    fun clearFeed(botId: String) {
+        val latest = _state.value.messages.filter { it.botId == botId }.maxOfOrNull { it.publishedAt } ?: return
+        updateSettings {
+            it.copy(
+                clearedBefore = it.clearedBefore + (botId to maxOf(latest, it.clearedBefore[botId] ?: 0L)),
+                readCursors = it.readCursors + (botId to maxOf(latest, it.readCursors[botId] ?: 0L)),
+            )
+        }
+        NotificationCenter.clearBot(getApplication(), botId)
+    }
+
     fun setTheme(themeId: String) = updateSettings { it.copy(themeId = themeId) }
 
     fun setFont(fontId: String) = updateSettings { it.copy(fontScale = fontId) }
@@ -446,7 +458,7 @@ class BotBekalutViewModel(app: Application) : AndroidViewModel(app) {
         now = System.currentTimeMillis(),
     )
 
-    private fun messagesFor(botId: String) = _state.value.messages.filter { it.botId == botId }.sortedBy { it.publishedAt }
+    private fun messagesFor(botId: String) = visibleMessages(_state.value.messages, _state.value.settings.clearedBefore).filter { it.botId == botId }.sortedBy { it.publishedAt }
 
     private fun syncTopics(settings: AppSettings) {
         if (_state.value.gate !is Gate.Ready) return

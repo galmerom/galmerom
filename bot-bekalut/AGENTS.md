@@ -13,6 +13,12 @@ The app shows the last 24 hours of selected Grok Bot routine chats in a large, c
 - For a later tiny text or color change, skip the local build and tests and let CI publish. On the first build, and on any change that can break compilation, run `./gradlew assembleDebug` in `bot-bekalut/` and fix errors before you finish.
 - Do not re-scan the whole repository on every run. Read this file first, then touch only files under `bot-bekalut/` and `.github/workflows/bot-bekalut.yml`.
 
+## Feed display behaviors
+
+- Every Firestore message is its own broadcast: a 2dp divider and the broadcast time (HH:mm, Asia/Jerusalem, plus `d.M` when not from today) are drawn above it in `MessageBubble`.
+- Button «נקה» (next to «סמן כנקרא») clears only the open bot's feed on the phone. It stores `AppSettings.clearedBefore[botId]` = latest publishedAt and hides messages at or before it (`visibleMessages`). It never deletes from Firestore; newer messages appear normally. It also marks the bot read.
+- `stripBroadcastHeader` (domain/Models.kt) removes the temporary header some bots prepend to `content`: leading lines of only ━ characters and a following `🕐 HH:MM` line, so there is no double divider. Keep it until the bots stop adding the header.
+
 ## Firebase
 
 - Project ID: `bot-bekalut` (Spark / no billing). Firestore Standard edition, location `me-west1`.

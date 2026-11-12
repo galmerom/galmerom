@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -68,11 +69,12 @@ import com.galmerom.botbekalut.domain.BotButton
 import com.galmerom.botbekalut.domain.ChatMessage
 import com.galmerom.botbekalut.domain.ChatRow
 import com.galmerom.botbekalut.domain.buildChatRows
-import com.galmerom.botbekalut.domain.formatClock
 import com.galmerom.botbekalut.domain.messageIdNear
 import com.galmerom.botbekalut.domain.messagePlainText
 import com.galmerom.botbekalut.domain.parseMarkdown
 import com.galmerom.botbekalut.domain.visibleBots
+import com.galmerom.botbekalut.domain.visibleMessages
+import com.galmerom.botbekalut.domain.formatBroadcastStamp
 import com.galmerom.botbekalut.ui.theme.rgbColor
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.debounce
@@ -91,9 +93,13 @@ fun ChatPane(
     onRevealUnread: (String) -> Unit,
     onSaveAnchor: (String, String, Int) -> Unit,
     onMarkRead: (String) -> Unit,
+    onClear: (String) -> Unit,
 ) {
+    val shownMessages = remember(state.messages, state.settings.clearedBefore) {
+        visibleMessages(state.messages, state.settings.clearedBefore)
+    }
     val bots = visibleBots(
-        messages = state.messages,
+        messages = shownMessages,
         order = state.settings.botOrder,
         readCursors = state.settings.readCursors,
         now = System.currentTimeMillis(),
@@ -156,9 +162,16 @@ fun ChatPane(
                 }
             },
         )
-        if (current?.hasUnread == true && activeId != null) {
-            TextButton(onClick = { onMarkRead(activeId) }, modifier = Modifier.padding(horizontal = 8.dp)) {
-                Text("סמן כנקרא", style = MaterialTheme.typography.titleMedium)
+        if (activeId != null) {
+            Row(Modifier.padding(horizontal = 8.dp)) {
+                if (current?.hasUnread == true) {
+                    TextButton(onClick = { onMarkRead(activeId) }) {
+                        Text("סמן כנקרא", style = MaterialTheme.typography.titleMedium)
+                    }
+                }
+                TextButton(onClick = { onClear(activeId) }) {
+                    Text("נקה", style = MaterialTheme.typography.titleMedium)
+                }
             }
         }
         PullToRefreshBox(
@@ -174,7 +187,7 @@ fun ChatPane(
                 val bot = bots[page]
                 BotMessageList(
                     botId = bot.id,
-                    messages = state.messages.filter { it.botId == bot.id }.sortedBy { it.publishedAt },
+                    messages = shownMessages.filter { it.botId == bot.id }.sortedBy { it.publishedAt },
                     listState = listStates.getOrPut(bot.id) { LazyListState() },
                     scroll = scroll,
                     onSaveAnchor = onSaveAnchor,
@@ -398,11 +411,17 @@ private fun MessageBubble(
     Column(
         Modifier
             .fillMaxWidth()
-            .background(background)
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .background(background),
     ) {
+        HorizontalDivider(thickness = 2.dp, color = MaterialTheme.colorScheme.outline)
+        Text(
+            formatBroadcastStamp(message.publishedAt),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 16.dp).padding(top = 8.dp),
+        )
         SelectionContainer(
-            Modifier.appendTextContextMenuComponents {
+            Modifier.padding(horizontal = 16.dp, vertical = 8.dp).appendTextContextMenuComponents {
                 separator()
                 item(key = CopyAllKey, label = "העתק הכל") {
                     copyPlainText(context, plain)
@@ -417,11 +436,5 @@ private fun MessageBubble(
                 }
             }
         }
-        Text(
-            formatClock(message.publishedAt),
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 4.dp),
-        )
     }
 }

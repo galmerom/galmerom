@@ -24,6 +24,7 @@ data class AppSettings(
     val mutedBotIds: List<String> = emptyList(),
     val scrollAnchors: Map<String, ScrollAnchor> = emptyMap(),
     val readCursors: Map<String, Long> = emptyMap(),
+    val clearedBefore: Map<String, Long> = emptyMap(),
     val knownBots: List<KnownBot> = emptyList(),
     val askedNotificationPermission: Boolean = false,
     val updatedAt: Long = 0L,

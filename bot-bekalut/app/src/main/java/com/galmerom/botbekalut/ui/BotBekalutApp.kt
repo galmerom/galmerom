@@ -135,6 +135,7 @@ private fun ReadyPane(
                     onRevealUnread = viewModel::revealUnread,
                     onSaveAnchor = viewModel::saveAnchor,
                     onMarkRead = viewModel::markReadToEnd,
+                    onClear = viewModel::clearFeed,
                 )
                 if (showPages) {
                     PagesScreen(
