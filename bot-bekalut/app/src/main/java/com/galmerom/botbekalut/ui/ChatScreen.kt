@@ -413,7 +413,10 @@ private fun MessageBubble(
             .fillMaxWidth()
             .background(background),
     ) {
-        HorizontalDivider(thickness = 2.dp, color = MaterialTheme.colorScheme.outline)
+        HorizontalDivider(
+            thickness = 4.dp,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
+        )
         Text(
             formatBroadcastStamp(message.publishedAt),
             style = MaterialTheme.typography.labelLarge,
