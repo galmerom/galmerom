@@ -37,6 +37,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.galmerom.botbekalut.BotBekalutViewModel
@@ -52,6 +54,8 @@ fun BotBekalutApp(launch: LaunchArgs) {
     val viewModel: BotBekalutViewModel = viewModel()
     val state by viewModel.state.collectAsStateWithLifecycle()
     val scroll by viewModel.scroll.collectAsStateWithLifecycle()
+    // Refresh quietly whenever the app comes back to the foreground (no-op until signed in).
+    LifecycleEventEffect(Lifecycle.Event.ON_START) { viewModel.refresh(userInitiated = false) }
     BotBekalutTheme(
         theme = ThemeId.fromId(state.settings.themeId),
         font = FontSizeId.fromId(state.settings.fontScale),

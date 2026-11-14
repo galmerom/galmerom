@@ -362,6 +362,7 @@ private fun BotMessageList(
                 }
             }
         }
+        FeedScrollbar(listState)
         AnimatedVisibility(
             visible = saveEnabled && listState.canScrollForward,
             modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp),

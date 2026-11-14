@@ -17,6 +17,9 @@ The app shows the last 24 hours of selected Grok Bot routine chats in a large, c
 
 - Every Firestore message is its own broadcast: a 2dp divider and the broadcast time (HH:mm, Asia/Jerusalem, plus `d.M` when not from today) are drawn above it in `MessageBubble`.
 - Button «נקה» (next to «סמן כנקרא») clears only the open bot's feed on the phone. It stores `AppSettings.clearedBefore[botId]` = latest publishedAt and hides messages at or before it (`visibleMessages`). It never deletes from Firestore; newer messages appear normally. It also marks the bot read.
+- The feed refreshes quietly whenever the app returns to the foreground (`LifecycleEventEffect(ON_START)` in `BotBekalutApp`, `refresh(userInitiated = false)`: no «אין עדכונים חדשים» snackbar). Pull-to-refresh and the refresh button still work.
+- `FeedScrollbar` (ui/FeedScrollbar.kt) is a thin scrollbar on the physical LEFT edge of each bot's feed, forced to LTR inside the RTL layout. It shows the position (thumb ∝ visible/total items) and a 24dp strip can be touched or dragged to jump through the feed (`scrollToItem`). Hidden when the list does not scroll. The math lives in domain/ScrollbarMath.kt.
+- Markdown tables (ui/TableView.kt): every column has one width shared by all rows (widest cell text measured with `rememberTextMeasurer`, 8dp padding each side, min 48dp, max 260dp for the sticky first column and 320dp for the others; 360/480dp in the fullscreen view). Cells never wrap (one line, ellipsis when over the max). A table whose cells are mostly Hebrew/Arabic (`tableIsRtl`) is laid out RTL, so the first column is on the right and horizontal scroll starts at the right. Width and direction helpers are in domain/TableLayout.kt.
 - `stripBroadcastHeader` (domain/Models.kt) removes the temporary header some bots prepend to `content`: leading lines of only ━ characters and a following `🕐 HH:MM` line, so there is no double divider. Keep it until the bots stop adding the header.
 
 ## Firebase
